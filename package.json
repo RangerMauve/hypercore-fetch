@@ -1,0 +1,26 @@
+{
+  "name": "dat-fetch",
+  "version": "1.0.0",
+  "description": "Implementation of Fetch that uses the DatArchive API",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RangerMauve/dat-fetch.git"
+  },
+  "keywords": [
+    "dat",
+    "fetch"
+  ],
+  "author": "RangerMauve",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/RangerMauve/dat-fetch/issues"
+  },
+  "homepage": "https://github.com/RangerMauve/dat-fetch#readme",
+  "dependencies": {
+    "resolve-dat-path": "^1.0.1"
+  }
+}
