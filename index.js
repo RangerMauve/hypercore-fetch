@@ -49,6 +49,7 @@ function parseDatURL (url) {
 
 class FakeResponse {
   constructor (status, statusText, buffer, url) {
+    this._buffer = buffer
     this.body = new FakeBody(buffer)
     this.url = url
     this.status = status
@@ -63,12 +64,6 @@ class FakeResponse {
   get useFinalURL () {
     return true
   }
-}
-
-class FakeBody {
-  constructor (buffer) {
-    this._buffer = buffer
-  }
   async arrayBuffer () {
     return this._buffer.buffer
   }
@@ -77,5 +72,11 @@ class FakeBody {
   }
   async json () {
     return JSON.parse(await this.text())
+  }
+}
+
+class FakeBody {
+  constructor (buffer) {
+    this._buffer = buffer
   }
 }
