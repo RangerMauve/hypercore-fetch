@@ -18,6 +18,7 @@ module.exports = function makeFetch (DatArchive, fetch, sourceDomain) {
     if (!shouldIntercept) return fetch.apply(this, arguments)
 
     let { path } = parseDatURL(url)
+    if(!path) path = "/"
     const archive = new DatArchive(url)
 
     try {
@@ -27,8 +28,10 @@ module.exports = function makeFetch (DatArchive, fetch, sourceDomain) {
       return new FakeResponse(
         404,
         'Not Found',
-        new Headers([]),
-        Buffer.from([]),
+        new Headers([
+          'content-type', 'text/plain'
+        ]),
+        Buffer.from(e.stack),
         url)
     }
 
