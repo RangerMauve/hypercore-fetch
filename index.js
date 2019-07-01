@@ -1,6 +1,8 @@
-const DAT_REGEX = /dat:\/\/([^/]+)\/?([^#?]*)?/i
-
 const resolveDatPath = require('resolve-dat-path/promise')
+const Headers = require('fetch-headers')
+const mime = require('mime/lite')
+
+const DAT_REGEX = /dat:\/\/([^/]+)\/?([^#?]*)?/i
 
 module.exports = function makeFetch (DatArchive, fetch, sourceDomain) {
   const isSourceDat = sourceDomain && sourceDomain.startsWith('dat://')
@@ -21,8 +23,13 @@ module.exports = function makeFetch (DatArchive, fetch, sourceDomain) {
     try {
       const resolved = await resolveDatPath(archive, path)
       path = resolved.path
-    } catch(e) {
-      return new FakeResponse(404, 'Not Found', Buffer.from([]), url)
+    } catch (e) {
+      return new FakeResponse(
+        404,
+        'Not Found',
+        new Headers([]),
+        Buffer.from([]),
+        url)
     }
 
     const rawBuffer = await archive.readFile(path, {
@@ -31,7 +38,13 @@ module.exports = function makeFetch (DatArchive, fetch, sourceDomain) {
 
     const buffer = Buffer.from(rawBuffer)
 
-    return new FakeResponse(buffer, url)
+    const contentType = mime.getType(path) || 'text/plain'
+
+    const headers = new Headers([
+      ['content-type', contentType]
+    ])
+
+    return new FakeResponse(200, 'ok', headers, buffer, url)
   }
 }
 
@@ -48,15 +61,13 @@ function parseDatURL (url) {
 }
 
 class FakeResponse {
-  constructor (status, statusText, buffer, url) {
+  constructor (status, statusText, headers, buffer, url) {
     this._buffer = buffer
     this.body = new FakeBody(buffer)
+    this.headers = headers
     this.url = url
     this.status = status
     this.statusText = statusText
-  }
-  get headers () {
-    return {}
   }
   get ok () {
     return this.status && this.status < 400
@@ -68,7 +79,7 @@ class FakeResponse {
     return this._buffer.buffer
   }
   async text () {
-    return this.buffer.toString('utf-8')
+    return this._buffer.toString('utf-8')
   }
   async json () {
     return JSON.parse(await this.text())

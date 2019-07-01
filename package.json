@@ -1,10 +1,10 @@
 {
   "name": "dat-fetch",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Implementation of Fetch that uses the DatArchive API",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node test"
   },
   "repository": {
     "type": "git",
@@ -21,6 +21,11 @@
   },
   "homepage": "https://github.com/RangerMauve/dat-fetch#readme",
   "dependencies": {
+    "fetch-headers": "^2.0.0",
+    "mime": "^2.4.4",
     "resolve-dat-path": "^1.1.0"
+  },
+  "devDependencies": {
+    "node-dat-archive": "^2.2.0"
   }
 }
