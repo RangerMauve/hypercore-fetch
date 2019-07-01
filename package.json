@@ -21,6 +21,6 @@
   },
   "homepage": "https://github.com/RangerMauve/dat-fetch#readme",
   "dependencies": {
-    "resolve-dat-path": "^1.0.1"
+    "resolve-dat-path": "^1.1.0"
   }
 }
