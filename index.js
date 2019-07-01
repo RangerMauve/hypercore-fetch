@@ -18,7 +18,7 @@ module.exports = function makeFetch (DatArchive, fetch, sourceDomain) {
     if (!shouldIntercept) return fetch.apply(this, arguments)
 
     let { path } = parseDatURL(url)
-    if(!path) path = "/"
+    if (!path) path = '/'
     const archive = new DatArchive(url)
 
     try {
