@@ -1,6 +1,8 @@
 const resolveDatPath = require('resolve-dat-path/promise')
 const Headers = require('fetch-headers')
 const mime = require('mime/lite')
+const concat = require('concat-stream')
+const intoStream = require('into-stream')
 
 const DAT_REGEX = /dat:\/\/([^/]+)\/?([^#?]*)?/i
 
@@ -21,8 +23,10 @@ module.exports = function makeFetch (DatArchive, fetch, sourceDomain) {
     if (!path) path = '/'
     const archive = new DatArchive(url)
 
+    let resolved = null
+
     try {
-      const resolved = await resolveDatPath(archive, path)
+      resolved = await resolveDatPath(archive, path)
       path = resolved.path
     } catch (e) {
       return new FakeResponse(
@@ -31,15 +35,34 @@ module.exports = function makeFetch (DatArchive, fetch, sourceDomain) {
         new Headers([
           'content-type', 'text/plain'
         ]),
-        Buffer.from(e.stack),
+        intoStream(e.stack),
         url)
     }
 
-    const rawBuffer = await archive.readFile(path, {
-      encoding: 'binary'
-    })
+    let buffer = null
 
-    const buffer = Buffer.from(rawBuffer)
+    if (resolved.type === 'file') {
+      const rawBuffer = await archive.readFile(path, {
+        encoding: 'binary'
+      })
+
+      buffer = Buffer.from(rawBuffer)
+    } else {
+      const files = await archive.readdir()
+
+      const page = `
+        <title>${url}</title>
+        <h1>Index of ${url}</h1>
+        <ul>
+          <li><a href="../">../</a></li>${files.map((file) => `
+          <li><a href="${file}">${file}</a></li>
+        `).join('')}</ul>
+      `
+
+      buffer = Buffer.from(page)
+    }
+
+    const stream = intoStream(buffer)
 
     const contentType = mime.getType(path) || 'text/plain'
 
@@ -47,7 +70,7 @@ module.exports = function makeFetch (DatArchive, fetch, sourceDomain) {
       ['content-type', contentType]
     ])
 
-    return new FakeResponse(200, 'ok', headers, buffer, url)
+    return new FakeResponse(200, 'ok', headers, stream, url)
   }
 }
 
@@ -64,9 +87,8 @@ function parseDatURL (url) {
 }
 
 class FakeResponse {
-  constructor (status, statusText, headers, buffer, url) {
-    this._buffer = buffer
-    this.body = new FakeBody(buffer)
+  constructor (status, statusText, headers, stream, url) {
+    this.body = stream
     this.headers = headers
     this.url = url
     this.status = status
@@ -79,18 +101,22 @@ class FakeResponse {
     return true
   }
   async arrayBuffer () {
-    return this._buffer.buffer
+    const buffer = await concatPromise(this.body)
+    return buffer.buffer
   }
   async text () {
-    return this._buffer.toString('utf-8')
+    const buffer = await concatPromise(this.body)
+    return buffer.toString('utf-8')
   }
   async json () {
     return JSON.parse(await this.text())
   }
 }
 
-class FakeBody {
-  constructor (buffer) {
-    this._buffer = buffer
-  }
+function concatPromise (stream) {
+  return new Promise((resolve, reject) => {
+    var concatStream = concat(resolve)
+    concatStream.once('error', reject)
+    stream.pipe(concatStream)
+  })
 }

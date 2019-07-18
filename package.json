@@ -21,7 +21,9 @@
   },
   "homepage": "https://github.com/RangerMauve/dat-fetch#readme",
   "dependencies": {
+    "concat-stream": "^2.0.0",
     "fetch-headers": "^2.0.0",
+    "into-stream": "^5.1.0",
     "mime": "^2.4.4",
     "resolve-dat-path": "^1.1.0"
   },
