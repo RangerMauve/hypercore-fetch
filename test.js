@@ -1,10 +1,27 @@
-const DatArchive = require('node-dat-archive')
-const fetch = require('./')(DatArchive, null)
-
-const DAT_FOUNDATION = 'dat://60c525b5589a5099aa3610a8ee550dcd454c3e118f7ac93b7d41b6b850272330'
+const storage = require('random-access-memory')
+const SDK = require('dat-sdk')
 
 async function test () {
-  const response = await fetch(DAT_FOUNDATION + '/')
+	const {Hyperdrive, resolveName, close } = await SDK({
+		storage
+	})
+
+	const archive = Hyperdrive('dat fetch test')
+
+	const FILE_LOCATION = '/index.html'
+
+	await archive.writeFile(FILE_LOCATION, '<h1>Hello World!</h1>')
+
+	const fetch = require('./')({
+		Hyperdrive,
+		resolveName
+	})
+
+	const url = `dat://${archive.key.toString('hex')}${FILE_LOCATION}`
+
+	console.log('Fetching from', url)
+
+  const response = await fetch(url)
 
   const text = await response.text()
 
@@ -12,6 +29,8 @@ async function test () {
 
   console.log(contentType)
   console.log(text)
+
+  await close()
 }
 
 test().then(() => {
