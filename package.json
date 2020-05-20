@@ -1,7 +1,7 @@
 {
   "name": "dat-fetch",
   "version": "2.1.0",
-  "description": "Implementation of Fetch that uses the DatArchive API",
+  "description": "Implementation of Fetch that uses the Dat SDK for loading p2p content",
   "bin": "bin.js",
   "main": "index.js",
   "scripts": {
@@ -25,8 +25,8 @@
     "concat-stream": "^2.0.0",
     "dat-node": "^3.5.15",
     "dat-sdk": "^2.0.0",
+    "end-of-stream-promise": "^1.0.0",
     "fetch-headers": "^2.0.0",
-    "hypercore-really-ready": "^1.0.0",
     "into-stream": "^5.1.0",
     "mime": "^2.4.4",
     "node-fetch": "^2.6.0",

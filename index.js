@@ -5,7 +5,6 @@ const concat = require('concat-stream')
 const intoStream = require('into-stream')
 const SDK = require('dat-sdk')
 const nodeFetch = require('node-fetch')
-const reallyReady = require('hypercore-really-ready')
 
 const DAT_REGEX = /\w+:\/\/([^/]+)\/?([^#?]*)?/
 
@@ -16,7 +15,7 @@ module.exports = function makeFetch (opts = {}) {
   let gettingSDK = null
   let onClose = async () => undefined
 
-  const isSourceDat = base && base.startsWith('dat://')
+  const isSourceDat = base && (base.startsWith('dat://') || base.startsWith('hyper://'))
 
   datFetch.close = () => onClose()
 
@@ -58,7 +57,7 @@ module.exports = function makeFetch (opts = {}) {
   async function datFetch (url) {
     if (typeof url !== 'string') return fetch.apply(this, arguments)
 
-    const isDatURL = url.startsWith('dat://')
+    const isDatURL = url.startsWith('dat://') || url.startsWith('hyper://')
     const urlHasProtocol = url.match(/^\w+:\/\//)
 
     const shouldIntercept = isDatURL || (!urlHasProtocol && isSourceDat)
@@ -75,8 +74,6 @@ module.exports = function makeFetch (opts = {}) {
     const archive = Hyperdrive(key)
 
     await archive.ready()
-
-    await reallyReady(archive.metadata)
 
     let resolved = null
 
@@ -102,7 +99,9 @@ module.exports = function makeFetch (opts = {}) {
       const files = await archive.readdir()
 
       const page = `
+        <!DOCTYPE html>
         <title>${url}</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
         <h1>Index of ${url}</h1>
         <ul>
           <li><a href="../">../</a></li>${files.map((file) => `

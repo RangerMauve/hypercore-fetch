@@ -2,24 +2,24 @@ const storage = require('random-access-memory')
 const SDK = require('dat-sdk')
 
 async function test () {
-	const {Hyperdrive, resolveName, close } = await SDK({
-		storage
-	})
+  const { Hyperdrive, resolveName, close } = await SDK({
+    storage
+  })
 
-	const archive = Hyperdrive('dat fetch test')
+  const archive = Hyperdrive('dat fetch test')
 
-	const FILE_LOCATION = '/index.html'
+  const FILE_LOCATION = '/index.html'
 
-	await archive.writeFile(FILE_LOCATION, '<h1>Hello World!</h1>')
+  await archive.writeFile(FILE_LOCATION, '<h1>Hello World!</h1>')
 
-	const fetch = require('./')({
-		Hyperdrive,
-		resolveName
-	})
+  const fetch = require('./')({
+    Hyperdrive,
+    resolveName
+  })
 
-	const url = `dat://${archive.key.toString('hex')}${FILE_LOCATION}`
+  const url = `dat://${archive.key.toString('hex')}${FILE_LOCATION}`
 
-	console.log('Fetching from', url)
+  console.log('Fetching from', url)
 
   const response = await fetch(url)
 

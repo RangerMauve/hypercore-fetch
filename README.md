@@ -1,16 +1,16 @@
 # dat-fetch
 
-Implementation of Fetch that uses the DatArchive API
+Implementation of Fetch that uses the Dat SDK for loading p2p content
 
 `npm install --save dat-fetch`
-
-**Warning** This uses the newest versin of Dat and doesn't work in the browser at the moment, nor does it have support for older version of Dat.
-To support old versions, install version 1.3.x.
 
 ```javascript
 const fetch = require('dat-fetch')()
 
 const someURL = `dat://somethinghere.com`
+
+// Also supports new `hyper://` protocol scheme
+// const someURL = `hyper://somethinghere.com`
 
 const response = await fetch(`${someURL}/dat.json`)
 
