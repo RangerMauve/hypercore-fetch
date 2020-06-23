@@ -76,10 +76,10 @@ module.exports = function makeFetch (opts = {}) {
     await archive.ready()
 
     let resolved = null
-
+		let finalPath = path
     try {
       resolved = await resolveDatPathAwait(archive, path)
-      path = resolved.path
+      finalPath = resolved.path
     } catch (e) {
       return new FakeResponse(
         404,
@@ -93,10 +93,8 @@ module.exports = function makeFetch (opts = {}) {
 
     let stream = null
 
-    if (resolved.type === 'file') {
-      stream = archive.createReadStream(path)
-    } else {
-      const files = await archive.readdir()
+    if (resolved.type === 'directory') {
+      const files = await archive.readdir(finalPath)
 
       const page = `
         <!DOCTYPE html>
@@ -111,6 +109,8 @@ module.exports = function makeFetch (opts = {}) {
 
       const buffer = Buffer.from(page)
       stream = intoStream(buffer)
+    } else {
+      stream = archive.createReadStream(path)
     }
 
     const contentType = mime.getType(path) || 'text/plain'
