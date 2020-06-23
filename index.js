@@ -2,9 +2,9 @@ const resolveDatPath = require('resolve-dat-path')
 const Headers = require('fetch-headers')
 const mime = require('mime/lite')
 const concat = require('concat-stream')
-const intoStream = require('into-stream')
 const SDK = require('dat-sdk')
 const nodeFetch = require('node-fetch')
+const { Readable } = require('stream')
 
 const DAT_REGEX = /\w+:\/\/([^/]+)\/?([^#?]*)?/
 
@@ -76,7 +76,7 @@ module.exports = function makeFetch (opts = {}) {
     await archive.ready()
 
     let resolved = null
-		let finalPath = path
+    let finalPath = path
     try {
       resolved = await resolveDatPathAwait(archive, path)
       finalPath = resolved.path
@@ -92,6 +92,7 @@ module.exports = function makeFetch (opts = {}) {
     }
 
     let stream = null
+    let contentType = mime.getType(finalPath) || 'text/plain'
 
     if (resolved.type === 'directory') {
       const files = await archive.readdir(finalPath)
@@ -100,20 +101,19 @@ module.exports = function makeFetch (opts = {}) {
         <!DOCTYPE html>
         <title>${url}</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <h1>Index of ${url}</h1>
+        <h1>Index of ${path}</h1>
         <ul>
           <li><a href="../">../</a></li>${files.map((file) => `
-          <li><a href="${file}">${file}</a></li>
+          <li><a href="${file}">./${file}</a></li>
         `).join('')}</ul>
       `
 
+      contentType = 'text/html'
       const buffer = Buffer.from(page)
       stream = intoStream(buffer)
     } else {
-      stream = archive.createReadStream(path)
+      stream = archive.createReadStream(finalPath)
     }
-
-    const contentType = mime.getType(path) || 'text/plain'
 
     const headers = new Headers([
       ['content-type', contentType]
@@ -172,5 +172,14 @@ function concatPromise (stream) {
     var concatStream = concat(resolve)
     concatStream.once('error', reject)
     stream.pipe(concatStream)
+  })
+}
+
+function intoStream (data) {
+  return new Readable({
+    read () {
+      this.push(data)
+      this.push(null)
+    }
   })
 }
