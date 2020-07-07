@@ -29,7 +29,8 @@
     "fetch-headers": "^2.0.0",
     "mime": "^2.4.4",
     "node-fetch": "^2.6.0",
-    "resolve-dat-path": "^1.1.0"
+    "range-parser": "^1.2.1",
+    "resolve-dat-path": "^1.2.0"
   },
   "devDependencies": {
     "random-access-memory": "^3.1.1"

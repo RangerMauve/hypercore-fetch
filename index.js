@@ -5,6 +5,7 @@ const concat = require('concat-stream')
 const SDK = require('dat-sdk')
 const nodeFetch = require('node-fetch')
 const { Readable } = require('stream')
+const parseRange = require('range-parser')
 
 const DAT_REGEX = /\w+:\/\/([^/]+)\/?([^#?]*)?/
 
@@ -54,8 +55,11 @@ module.exports = function makeFetch (opts = {}) {
     })
   }
 
-  async function datFetch (url) {
-    if (typeof url !== 'string') return fetch.apply(this, arguments)
+  async function datFetch (url, opts = {}) {
+    if (typeof url !== 'string') {
+      opts = url
+      url = opts.url
+    }
 
     const isDatURL = url.startsWith('dat://') || url.startsWith('hyper://')
     const urlHasProtocol = url.match(/^\w+:\/\//)
@@ -64,40 +68,49 @@ module.exports = function makeFetch (opts = {}) {
 
     if (!shouldIntercept) return fetch.apply(this, arguments)
 
-    let { path, key } = parseDatURL(url)
-    if (!path) path = '/'
+    const { headers: rawHeaders, method = 'GET' } = opts
+    const headers = new Headers(rawHeaders || {})
 
-    const resolve = await getResolve()
-    key = await resolve(`dat://${key}`)
-    const Hyperdrive = await getHyperdrive()
+    const responseHeaders = new Headers()
 
-    const archive = Hyperdrive(key)
-
-    await archive.ready()
-
-    let resolved = null
-    let finalPath = path
     try {
-      resolved = await resolveDatPathAwait(archive, path)
-      finalPath = resolved.path
-    } catch (e) {
-      return new FakeResponse(
-        404,
-        'Not Found',
-        new Headers([
-          'content-type', 'text/plain'
-        ]),
-        intoStream(e.stack),
-        url)
-    }
+      let { path, key } = parseDatURL(url)
+      if (!path) path = '/'
 
-    let stream = null
-    let contentType = mime.getType(finalPath) || 'text/plain'
+      const resolve = await getResolve()
+      key = await resolve(`dat://${key}`)
+      const Hyperdrive = await getHyperdrive()
 
-    if (resolved.type === 'directory') {
-      const files = await archive.readdir(finalPath)
+      const archive = Hyperdrive(key)
 
-      const page = `
+      await archive.ready()
+
+      let resolved = null
+      let finalPath = path
+      try {
+        resolved = await resolveDatPathAwait(archive, path)
+        finalPath = resolved.path
+      } catch (e) {
+        return new FakeResponse(
+          404,
+          'Not Found',
+          new Headers([
+            'content-type', 'text/plain'
+          ]),
+          intoStream(e.stack),
+          url)
+      }
+
+      responseHeaders.set('Content-Type', mime.getType(finalPath) || 'text/plain')
+
+      let stream = null
+      const isRanged = headers.get('Range') || headers.get('range')
+      let statusCode = 200
+
+      if (resolved.type === 'directory') {
+        const files = await archive.readdir(finalPath)
+
+        const page = `
         <!DOCTYPE html>
         <title>${url}</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -107,19 +120,43 @@ module.exports = function makeFetch (opts = {}) {
           <li><a href="${file}">./${file}</a></li>
         `).join('')}</ul>
       `
+        responseHeaders.set('Content-Type', 'text/html')
+        const buffer = Buffer.from(page)
+        stream = intoStream(buffer)
+      } else {
+        responseHeaders.set('Accept-Ranges', 'bytes')
+        if (isRanged) {
+          const { stat } = resolved
+          const { size } = stat
+          const range = parseRange(isRanged)[0]
+          if (range && range.type === 'bytes') {
+            statusCode = 206
+            const { start, end } = range
+            const length = (end - start + 1)
+            headers.set('Content-Length', `${length}`)
+            headers.set('Content-Range', `bytes${start}-${end}/${size}`)
+            stream = archive.createReadStream(finalPath, {
+              start,
+              end
+            })
+          } else {
+            headers.set('Content-Length', `${size}`)
+            stream = archive.createReadStream(finalPath)
+          }
+        } else {
+          stream = archive.createReadStream(finalPath)
+        }
+      }
 
-      contentType = 'text/html'
-      const buffer = Buffer.from(page)
-      stream = intoStream(buffer)
-    } else {
-      stream = archive.createReadStream(finalPath)
+      if (method.toLowerCase() === 'head') {
+        stream.destroy()
+        return new FakeResponse(204, 'ok', responseHeaders, intoStream(''), url)
+      } else {
+        return new FakeResponse(statusCode, 'ok', responseHeaders, stream, url)
+      }
+    } catch (e) {
+      return new FakeResponse(500, 'server error', responseHeaders, intoStream(e.stack), url)
     }
-
-    const headers = new Headers([
-      ['content-type', contentType]
-    ])
-
-    return new FakeResponse(200, 'ok', headers, stream, url)
   }
 }
 
