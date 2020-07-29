@@ -3,14 +3,15 @@ const Headers = require('fetch-headers')
 const mime = require('mime/lite')
 const concat = require('concat-stream')
 const SDK = require('dat-sdk')
-const nodeFetch = require('node-fetch')
 const { Readable } = require('stream')
 const parseRange = require('range-parser')
+const bodyToStream = require('fetch-request-body-to-stream')
+const pump = require('pump-promise')
 
 const DAT_REGEX = /\w+:\/\/([^/]+)\/?([^#?]*)?/
 
 module.exports = function makeFetch (opts = {}) {
-  let { Hyperdrive, resolveName, base, fetch = nodeFetch } = opts
+  let { Hyperdrive, resolveName, base, session, writable = true } = opts
 
   let sdk = null
   let gettingSDK = null
@@ -55,6 +56,13 @@ module.exports = function makeFetch (opts = {}) {
     })
   }
 
+  function checkWritable (archive) {
+    if (!writable) throw new Error('Writing to archives disabled')
+    if (!archive.writable) {
+      throw new Error('Archive not writable')
+    }
+  }
+
   async function datFetch (url, opts = {}) {
     if (typeof url !== 'string') {
       opts = url
@@ -66,51 +74,103 @@ module.exports = function makeFetch (opts = {}) {
 
     const shouldIntercept = isDatURL || (!urlHasProtocol && isSourceDat)
 
-    if (!shouldIntercept) return fetch.apply(this, arguments)
+    if (!shouldIntercept) throw new Error('Invalid protocol, must be dat:// or hyper://')
 
-    const { headers: rawHeaders, method = 'GET' } = opts
+    const { headers: rawHeaders, method: rawMethod } = opts
     const headers = new Headers(rawHeaders || {})
+    const method = rawMethod ? rawMethod.toUpperCase() : 'GET'
 
     const responseHeaders = new Headers()
-
     try {
       let { path, key } = parseDatURL(url)
       if (!path) path = '/'
 
       const resolve = await getResolve()
-      key = await resolve(`dat://${key}`)
+
+      try {
+        key = await resolve(`dat://${key}`)
+      } catch (e) {
+        // Probably a domain that couldn't resolve
+        if (key.includes('.')) throw e
+      }
       const Hyperdrive = await getHyperdrive()
 
       const archive = Hyperdrive(key)
 
       await archive.ready()
 
-      let resolved = null
-      let finalPath = path
-      try {
-        resolved = await resolveDatPathAwait(archive, path)
-        finalPath = resolved.path
-      } catch (e) {
-        return new FakeResponse(
-          404,
-          'Not Found',
-          new Headers([
-            'content-type', 'text/plain'
-          ]),
-          intoStream(e.stack),
-          url)
-      }
+      if (method === 'PUT') {
+        checkWritable(archive)
+        const { body } = opts
+        const source = bodyToStream(body, session)
+        const destination = archive.createWriteStream(path)
 
-      responseHeaders.set('Content-Type', mime.getType(finalPath) || 'text/plain')
+        await pump(source, destination)
 
-      let stream = null
-      const isRanged = headers.get('Range') || headers.get('range')
-      let statusCode = 200
+        return new FakeResponse(200, 'OK', responseHeaders, intoStream(''), url)
+      } else if (method === 'DELETE') {
+        checkWritable(archive)
 
-      if (resolved.type === 'directory') {
-        const files = await archive.readdir(finalPath)
+        const stats = await archive.stat(path)
+        // Weird stuff happening up in here...
+        const stat = Array.isArray(stats) ? stats[0] : stats
 
-        const page = `
+        if (stat.isDirectory()) {
+          await archive.rmdir(path)
+        } else {
+          await archive.unlink(path)
+        }
+
+        return new FakeResponse(200, 'OK', responseHeaders, intoStream(''), url)
+      } else if ((method === 'GET') || (method === 'HEAD')) {
+        let resolved = null
+        let finalPath = path
+
+        if (finalPath === 'index.json') {
+          const resolvedURL = `hyper://${archive.key.toString('hex')}`
+          const { writable } = archive
+          let content = { url: resolvedURL, writable }
+          try {
+            const string = await archive.readFile(finalPath, 'utf8')
+            const parsed = JSON.parse(string)
+            content = { parsed, ...content }
+          } catch (e) {
+            // Probably a parsing error or something
+          }
+
+          const stringified = JSON.stringify(content, null, '\t')
+
+          responseHeaders.set('Content-Type', 'application/json')
+
+          return new FakeResponse(200, 'OK', responseHeaders, intoStream(stringified), url)
+        }
+        try {
+          resolved = await resolveDatPathAwait(archive, path)
+          finalPath = resolved.path
+        } catch (e) {
+          return new FakeResponse(
+            404,
+            'Not Found',
+            new Headers([
+              'content-type', 'text/plain'
+            ]),
+            intoStream(e.stack),
+            url)
+        }
+
+        responseHeaders.set('Content-Type', mime.getType(finalPath) || 'text/plain')
+
+        let stream = null
+        const isRanged = headers.get('Range') || headers.get('range')
+        let statusCode = 200
+
+        if (resolved.type === 'directory') {
+          const files = await archive.readdir(finalPath)
+          if (headers.get('Accept') === 'application/json') {
+            const json = JSON.stringify(files, null, '\t')
+            stream = intoStream(Buffer.from(json))
+          } else {
+            const page = `
         <!DOCTYPE html>
         <title>${url}</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -118,41 +178,46 @@ module.exports = function makeFetch (opts = {}) {
         <ul>
           <li><a href="../">../</a></li>${files.map((file) => `
           <li><a href="${file}">./${file}</a></li>
-        `).join('')}</ul>
+        `).join('')}
+        </ul>
       `
-        responseHeaders.set('Content-Type', 'text/html')
-        const buffer = Buffer.from(page)
-        stream = intoStream(buffer)
-      } else {
-        responseHeaders.set('Accept-Ranges', 'bytes')
-        if (isRanged) {
-          const { stat } = resolved
-          const { size } = stat
-          const range = parseRange(isRanged)[0]
-          if (range && range.type === 'bytes') {
-            statusCode = 206
-            const { start, end } = range
-            const length = (end - start + 1)
-            headers.set('Content-Length', `${length}`)
-            headers.set('Content-Range', `bytes${start}-${end}/${size}`)
-            stream = archive.createReadStream(finalPath, {
-              start,
-              end
-            })
-          } else {
-            headers.set('Content-Length', `${size}`)
-            stream = archive.createReadStream(finalPath)
+            responseHeaders.set('Content-Type', 'text/html')
+            const buffer = Buffer.from(page)
+            stream = intoStream(buffer)
           }
         } else {
-          stream = archive.createReadStream(finalPath)
+          responseHeaders.set('Accept-Ranges', 'bytes')
+          if (isRanged) {
+            const { stat } = resolved
+            const { size } = stat
+            const range = parseRange(size, isRanged)[0]
+            if (range && range.type === 'bytes') {
+              statusCode = 206
+              const { start, end } = range
+              const length = (end - start + 1)
+              headers.set('Content-Length', `${length}`)
+              headers.set('Content-Range', `bytes${start}-${end}/${size}`)
+              stream = archive.createReadStream(finalPath, {
+                start,
+                end
+              })
+            } else {
+              headers.set('Content-Length', `${size}`)
+              stream = archive.createReadStream(finalPath)
+            }
+          } else {
+            stream = archive.createReadStream(finalPath)
+          }
         }
-      }
 
-      if (method.toLowerCase() === 'head') {
-        stream.destroy()
-        return new FakeResponse(204, 'ok', responseHeaders, intoStream(''), url)
+        if (method === 'HEAD') {
+          stream.destroy()
+          return new FakeResponse(204, 'ok', responseHeaders, intoStream(''), url)
+        } else {
+          return new FakeResponse(statusCode, 'ok', responseHeaders, stream, url)
+        }
       } else {
-        return new FakeResponse(statusCode, 'ok', responseHeaders, stream, url)
+        return new FakeResponse(405, 'Method Not Allowed', responseHeaders, intoStream('Method Not Allowed'), url)
       }
     } catch (e) {
       return new FakeResponse(500, 'server error', responseHeaders, intoStream(e.stack), url)
