@@ -101,12 +101,16 @@ module.exports = function makeFetch (opts = {}) {
 
       if (method === 'PUT') {
         checkWritable(archive)
-        const { body } = opts
-        const source = bodyToStream(body, session)
-        const destination = archive.createWriteStream(path)
+        if (path.endsWith('/')) {
+          await archive.mkdir(path)
+        } else {
+          // Create a new file from the request body
+          const { body } = opts
+          const source = bodyToStream(body, session)
+          const destination = archive.createWriteStream(path)
 
-        await pump(source, destination)
-
+          await pump(source, destination)
+        }
         return new FakeResponse(200, 'OK', responseHeaders, intoStream(''), url)
       } else if (method === 'DELETE') {
         checkWritable(archive)
