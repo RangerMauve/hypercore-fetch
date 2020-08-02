@@ -169,7 +169,12 @@ module.exports = function makeFetch (opts = {}) {
         let statusCode = 200
 
         if (resolved.type === 'directory') {
-          const files = await archive.readdir(finalPath)
+          const files = await Promise.all(await archive.readdir(finalPath).then(files => files.map(async fileName => {
+            const stats = await archive.stat(finalPath + '/' + fileName)
+            const stat = Array.isArray(stats) ? stats[0] : stats
+            return stat.isDirectory() ? fileName + '/' : fileName
+          })))
+
           if (headers.get('Accept') === 'application/json') {
             const json = JSON.stringify(files, null, '\t')
             stream = intoStream(Buffer.from(json))
