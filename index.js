@@ -9,6 +9,7 @@ const bodyToStream = require('fetch-request-body-to-stream')
 const pump = require('pump-promise')
 
 const DAT_REGEX = /\w+:\/\/([^/]+)\/?([^#?]*)?/
+const NOT_WRITABLE_ERROR = 'Archive not writable'
 
 module.exports = function makeFetch (opts = {}) {
   let { Hyperdrive, resolveName, base, session, writable = true } = opts
@@ -57,9 +58,9 @@ module.exports = function makeFetch (opts = {}) {
   }
 
   function checkWritable (archive) {
-    if (!writable) throw new Error('Writing to archives disabled')
+    if (!writable) throw new Error(NOT_WRITABLE_ERROR)
     if (!archive.writable) {
-      throw new Error('Archive not writable')
+      throw new Error(NOT_WRITABLE_ERROR)
     }
   }
 
@@ -195,14 +196,14 @@ module.exports = function makeFetch (opts = {}) {
               statusCode = 206
               const { start, end } = range
               const length = (end - start + 1)
-              headers.set('Content-Length', `${length}`)
-              headers.set('Content-Range', `bytes${start}-${end}/${size}`)
+              responseHeaders.set('Content-Length', `${length}`)
+              responseHeaders.set('Content-Range', `bytes${start}-${end}/${size}`)
               stream = archive.createReadStream(finalPath, {
                 start,
                 end
               })
             } else {
-              headers.set('Content-Length', `${size}`)
+              responseHeaders.set('Content-Length', `${size}`)
               stream = archive.createReadStream(finalPath)
             }
           } else {
@@ -217,10 +218,12 @@ module.exports = function makeFetch (opts = {}) {
           return new FakeResponse(statusCode, 'ok', responseHeaders, stream, url)
         }
       } else {
+        responseHeaders.set('Allow', 'GET, HEAD, PUT, DELETE')
         return new FakeResponse(405, 'Method Not Allowed', responseHeaders, intoStream('Method Not Allowed'), url)
       }
     } catch (e) {
-      return new FakeResponse(500, 'server error', responseHeaders, intoStream(e.stack), url)
+      const status = (e.message === NOT_WRITABLE_ERROR) ? 403 : 500
+      return new FakeResponse(status, 'server error', responseHeaders, intoStream(e.stack), url)
     }
   }
 }
