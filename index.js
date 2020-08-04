@@ -222,8 +222,10 @@ module.exports = function makeFetch (opts = {}) {
         return new FakeResponse(405, 'Method Not Allowed', responseHeaders, intoStream('Method Not Allowed'), url)
       }
     } catch (e) {
-      const status = (e.message === NOT_WRITABLE_ERROR) ? 403 : 500
-      return new FakeResponse(status, 'server error', responseHeaders, intoStream(e.stack), url)
+      const isUnauthorized = (e.message === NOT_WRITABLE_ERROR)
+      const status = isUnauthorized ? 403 : 500
+      const message = isUnauthorized ? 'not authorized' : 'server error'
+      return new FakeResponse(status, message, responseHeaders, intoStream(e.stack), url)
     }
   }
 }
