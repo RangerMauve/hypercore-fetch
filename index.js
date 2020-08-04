@@ -224,7 +224,7 @@ module.exports = function makeFetch (opts = {}) {
     } catch (e) {
       const isUnauthorized = (e.message === NOT_WRITABLE_ERROR)
       const status = isUnauthorized ? 403 : 500
-      const message = isUnauthorized ? 'not authorized' : 'server error'
+      const message = isUnauthorized ? 'Not Authorized' : 'Server Error'
       return new FakeResponse(status, message, responseHeaders, intoStream(e.stack), url)
     }
   }
