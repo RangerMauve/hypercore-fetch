@@ -12,7 +12,7 @@ const DAT_REGEX = /\w+:\/\/([^/]+)\/?([^#?]*)?/
 const NOT_WRITABLE_ERROR = 'Archive not writable'
 
 module.exports = function makeFetch (opts = {}) {
-  let { Hyperdrive, resolveName, base, session, writable = true } = opts
+  let { Hyperdrive, resolveName, base, session, writable = false } = opts
 
   let sdk = null
   let gettingSDK = null
