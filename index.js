@@ -102,12 +102,16 @@ module.exports = function makeFetch (opts = {}) {
 
       if (method === 'PUT') {
         checkWritable(archive)
-        const { body } = opts
-        const source = bodyToStream(body, session)
-        const destination = archive.createWriteStream(path)
+        if (path.endsWith('/')) {
+          await archive.mkdir(path)
+        } else {
+          // Create a new file from the request body
+          const { body } = opts
+          const source = bodyToStream(body, session)
+          const destination = archive.createWriteStream(path)
 
-        await pump(source, destination)
-
+          await pump(source, destination)
+        }
         return new FakeResponse(200, 'OK', responseHeaders, intoStream(''), url)
       } else if (method === 'DELETE') {
         checkWritable(archive)
@@ -166,7 +170,9 @@ module.exports = function makeFetch (opts = {}) {
         let statusCode = 200
 
         if (resolved.type === 'directory') {
-          const files = await archive.readdir(finalPath)
+          const stats = await archive.readdir(finalPath, { includeStats: true })
+          const files = stats.map(({ stat, name }) => (stat.isDirectory() ? `${name}/` : name))
+
           if (headers.get('Accept') === 'application/json') {
             const json = JSON.stringify(files, null, '\t')
             stream = intoStream(Buffer.from(json))
