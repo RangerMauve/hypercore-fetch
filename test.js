@@ -14,7 +14,8 @@ async function test () {
 
   const fetch = require('./')({
     Hyperdrive,
-    resolveName
+    resolveName,
+    writable: true
   })
 
   const url = `dat://${archive.key.toString('hex')}${FILE_LOCATION}`
@@ -29,13 +30,14 @@ async function test () {
 
   console.log(contentType)
   console.log(text)
+  console.log([...response.headers.entries()])
 
   const url2 = 'hyper://example/example.txt'
   const contents = 'Hello World'
 
   console.log('Putting into', url2, contents)
 
-  await fetch(url2, { method: 'PUT', body: contents })
+  await checkOK(await fetch(url2, { method: 'PUT', body: contents }))
 
   console.log('Wrote to archive')
 
@@ -65,13 +67,23 @@ async function test () {
   console.log('Directory after delete')
   console.log(text4)
 
-  const url4 = 'hyper://example/index.json'
+  const url4 = 'hyper://example/.well-known/dat'
 
   const response5 = await fetch(url4)
   await checkOK(response5)
-  const json = await response5.json()
+  const json = await response5.text()
 
-  console.log('Created archive info', json)
+  console.log('Archive well-known URL', json)
+
+  const url5 = 'hyper://example/foo/bar/'
+  await checkOK(await fetch(url5, { method: 'PUT' }))
+
+  console.log('Created multiple folders')
+
+  const url6 = 'hyper://example/fizz/buzz/example.txt'
+  await checkOK(await fetch(url6, { method: 'PUT', contents }))
+
+  console.log('Created file along with parent folders')
 
   await close()
 }

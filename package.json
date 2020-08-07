@@ -29,6 +29,7 @@
     "end-of-stream-promise": "^1.0.0",
     "fetch-headers": "^2.0.0",
     "fetch-request-body-to-stream": "^1.0.0",
+    "make-dir": "^3.1.0",
     "mime": "^2.4.4",
     "pump-promise": "^1.0.0",
     "range-parser": "^1.2.1",

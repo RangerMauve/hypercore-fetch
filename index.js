@@ -7,9 +7,14 @@ const { Readable } = require('stream')
 const parseRange = require('range-parser')
 const bodyToStream = require('fetch-request-body-to-stream')
 const pump = require('pump-promise')
+const makeDir = require('make-dir')
 
 const DAT_REGEX = /\w+:\/\/([^/]+)\/?([^#?]*)?/
 const NOT_WRITABLE_ERROR = 'Archive not writable'
+
+const READABLE_ALLOW = ['GET', 'HEAD']
+const WRITABLE_ALLOW = ['PUT', 'DELETE']
+const ALL_ALLOW = READABLE_ALLOW.concat(WRITABLE_ALLOW)
 
 module.exports = function makeFetch (opts = {}) {
   let { Hyperdrive, resolveName, base, session, writable = false } = opts
@@ -100,11 +105,25 @@ module.exports = function makeFetch (opts = {}) {
 
       await archive.ready()
 
+      const canonical = `hyper://${archive.key.toString('hex')}/${path || ''}`
+      responseHeaders.append('Link', `<${canonical}>; rel="canonical"`)
+
+      const isWritable = writable && archive.writable
+      const allowHeaders = isWritable ? ALL_ALLOW : READABLE_ALLOW
+      responseHeaders.set('Allow', allowHeaders.join(', '))
+
+      // We can say the file hasn't changed if the drive version hasn't changed
+      responseHeaders.set('ETag', `"${archive.version}"`)
+
       if (method === 'PUT') {
         checkWritable(archive)
         if (path.endsWith('/')) {
-          await archive.mkdir(path)
+          await makeDir(path, { fs: archive })
         } else {
+          const parentDir = path.split('/').slice(0, -1).join('/')
+          if (parentDir) {
+            await makeDir(parentDir, { fs: archive })
+          }
           // Create a new file from the request body
           const { body } = opts
           const source = bodyToStream(body, session)
@@ -128,30 +147,22 @@ module.exports = function makeFetch (opts = {}) {
 
         return new FakeResponse(200, 'OK', responseHeaders, intoStream(''), url)
       } else if ((method === 'GET') || (method === 'HEAD')) {
-        let resolved = null
+        let stat = null
         let finalPath = path
 
-        if (finalPath === 'index.json') {
-          const resolvedURL = `hyper://${archive.key.toString('hex')}`
-          const { writable } = archive
-          let content = { url: resolvedURL, writable }
-          try {
-            const string = await archive.readFile(finalPath, 'utf8')
-            const parsed = JSON.parse(string)
-            content = { parsed, ...content }
-          } catch (e) {
-            // Probably a parsing error or something
-          }
-
-          const stringified = JSON.stringify(content, null, '\t')
-
-          responseHeaders.set('Content-Type', 'application/json')
-
-          return new FakeResponse(200, 'OK', responseHeaders, intoStream(stringified), url)
+        if (finalPath === '.well-known/dat') {
+          const { key } = archive
+          const entry = `dat://${key.toString('hex')}\nttl=3600`
+          return new FakeResponse(200, 'OK', responseHeaders, intoStream(entry), url)
         }
         try {
-          resolved = await resolveDatPathAwait(archive, path)
-          finalPath = resolved.path
+          if (headers.get('X-Resolve') === 'none') {
+            stat = await archive.stat(path)
+          } else {
+            const resolved = await resolveDatPathAwait(archive, path)
+            finalPath = resolved.path
+            stat = resolved.stat
+          }
         } catch (e) {
           return new FakeResponse(
             404,
@@ -169,7 +180,7 @@ module.exports = function makeFetch (opts = {}) {
         const isRanged = headers.get('Range') || headers.get('range')
         let statusCode = 200
 
-        if (resolved.type === 'directory') {
+        if (stat.isDirectory()) {
           const stats = await archive.readdir(finalPath, { includeStats: true })
           const files = stats.map(({ stat, name }) => (stat.isDirectory() ? `${name}/` : name))
 
@@ -194,8 +205,12 @@ module.exports = function makeFetch (opts = {}) {
           }
         } else {
           responseHeaders.set('Accept-Ranges', 'bytes')
+
+          const { blocks, downloadedBlocks } = await archive.stats(finalPath)
+          responseHeaders.set('X-Blocks', `${blocks}`)
+          responseHeaders.set('X-Blocks-Downloaded', `${downloadedBlocks}`)
+
           if (isRanged) {
-            const { stat } = resolved
             const { size } = stat
             const range = parseRange(size, isRanged)[0]
             if (range && range.type === 'bytes') {
@@ -224,7 +239,6 @@ module.exports = function makeFetch (opts = {}) {
           return new FakeResponse(statusCode, 'ok', responseHeaders, stream, url)
         }
       } else {
-        responseHeaders.set('Allow', 'GET, HEAD, PUT, DELETE')
         return new FakeResponse(405, 'Method Not Allowed', responseHeaders, intoStream('Method Not Allowed'), url)
       }
     } catch (e) {
