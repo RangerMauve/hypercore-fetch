@@ -206,9 +206,13 @@ module.exports = function makeFetch (opts = {}) {
         } else {
           responseHeaders.set('Accept-Ranges', 'bytes')
 
-          const { blocks, downloadedBlocks } = await archive.stats(finalPath)
-          responseHeaders.set('X-Blocks', `${blocks}`)
-          responseHeaders.set('X-Blocks-Downloaded', `${downloadedBlocks}`)
+          try {
+            const { blocks, downloadedBlocks } = await archive.stats(finalPath)
+            responseHeaders.set('X-Blocks', `${blocks}`)
+            responseHeaders.set('X-Blocks-Downloaded', `${downloadedBlocks}`)
+          } catch (e) {
+            // Don't worry about it, it's optional.
+          }
 
           if (isRanged) {
             const { size } = stat
