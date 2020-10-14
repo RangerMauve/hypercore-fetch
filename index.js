@@ -216,13 +216,13 @@ module.exports = function makeFetch (opts = {}) {
 
           if (isRanged) {
             const { size } = stat
-            const range = parseRange(size, isRanged)[0]
-            if (range && range.type === 'bytes') {
+            const ranges = parseRange(size, isRanged)
+            if (ranges && ranges.length && ranges.type === 'bytes') {
               statusCode = 206
-              const { start, end } = range
+              const [{ start, end }] = ranges
               const length = (end - start + 1)
               responseHeaders.set('Content-Length', `${length}`)
-              responseHeaders.set('Content-Range', `bytes${start}-${end}/${size}`)
+              responseHeaders.set('Content-Range', `bytes ${start}-${end}/${size}`)
               stream = archive.createReadStream(finalPath, {
                 start,
                 end
