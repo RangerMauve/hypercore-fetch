@@ -174,7 +174,7 @@ module.exports = function makeFetch (opts = {}) {
             url)
         }
 
-        responseHeaders.set('Content-Type', mime.getType(finalPath) || 'text/plain')
+        responseHeaders.set('Content-Type', getMimeType(finalPath))
 
         let stream = null
         const isRanged = headers.get('Range') || headers.get('range')
@@ -313,4 +313,10 @@ function intoStream (data) {
       this.push(null)
     }
   })
+}
+
+function getMimeType (path) {
+  let mimeType = mime.getType(path) || 'text/plain'
+  if (mimeType.startsWith('text/')) mimeType = `${mimeType}; charset=utf-8`
+  return mimeType
 }
