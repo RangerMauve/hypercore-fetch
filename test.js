@@ -1,9 +1,8 @@
-const storage = require('random-access-memory')
 const SDK = require('dat-sdk')
 
 async function test () {
   const { Hyperdrive, resolveName, close } = await SDK({
-    storage
+    persist: false
   })
 
   const archive = Hyperdrive('dat fetch test')
@@ -81,9 +80,20 @@ async function test () {
   console.log('Created multiple folders')
 
   const url6 = 'hyper://example/fizz/buzz/example.txt'
-  await checkOK(await fetch(url6, { method: 'PUT', contents }))
+  await checkOK(await fetch(url6, { method: 'PUT', body: contents }))
 
   console.log('Created file along with parent folders')
+
+  const url7 = 'hyper://example/baz/index.html'
+  await checkOK(await fetch(url7, { method: 'PUT', body: contents }))
+
+  const response7 = await fetch('hyper://example/baz')
+
+  console.log('Resolved index', await response7.text())
+
+  const response8 = await fetch('hyper://example/baz', {headers: {'X-Resolve': 'none' }})
+
+  console.log('Bypassed resolve', await response8.text())
 
   await close()
 }

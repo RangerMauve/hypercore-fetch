@@ -157,7 +157,7 @@ module.exports = function makeFetch (opts = {}) {
         }
         try {
           if (headers.get('X-Resolve') === 'none') {
-            stat = await archive.stat(path)
+            [stat] = await archive.stat(path)
           } else {
             const resolved = await resolveDatPathAwait(archive, path)
             finalPath = resolved.path
