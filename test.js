@@ -91,7 +91,7 @@ async function test () {
 
   console.log('Resolved index', await response7.text())
 
-  const response8 = await fetch('hyper://example/baz', {headers: {'X-Resolve': 'none' }})
+  const response8 = await fetch('hyper://example/baz', { headers: { 'X-Resolve': 'none' } })
 
   console.log('Bypassed resolve', await response8.text())
 

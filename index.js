@@ -87,6 +87,11 @@ module.exports = function makeFetch (opts = {}) {
     const method = rawMethod ? rawMethod.toUpperCase() : 'GET'
 
     const responseHeaders = new Headers()
+    responseHeaders.set('Access-Control-Allow-Origin', '*')
+    responseHeaders.set('Allow-CSP-From', '*')
+    responseHeaders.set('Access-Control-Allow-Headers', '*')
+    responseHeaders.set('Cache-Control', 'no-cache')
+
     try {
       let { path, key } = parseDatURL(url)
       if (!path) path = '/'
