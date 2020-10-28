@@ -12,7 +12,7 @@ const makeDir = require('make-dir')
 const DAT_REGEX = /\w+:\/\/([^/]+)\/?([^#?]*)?/
 const NOT_WRITABLE_ERROR = 'Archive not writable'
 
-const READABLE_ALLOW = ['GET', 'HEAD']
+const READABLE_ALLOW = ['GET', 'HEAD', 'DOWNLOAD', 'CLEAR']
 const WRITABLE_ALLOW = ['PUT', 'DELETE']
 const ALL_ALLOW = READABLE_ALLOW.concat(WRITABLE_ALLOW)
 
@@ -93,7 +93,7 @@ module.exports = function makeFetch (opts = {}) {
     responseHeaders.set('Cache-Control', 'no-cache')
 
     try {
-      let { path, key } = parseDatURL(url)
+      let { path, key, version } = parseDatURL(url)
       if (!path) path = '/'
 
       const resolve = await getResolve()
@@ -106,9 +106,14 @@ module.exports = function makeFetch (opts = {}) {
       }
       const Hyperdrive = await getHyperdrive()
 
-      const archive = Hyperdrive(key)
+      let archive = Hyperdrive(key)
 
       await archive.ready()
+
+      if (version) {
+        archive = archive.checkout(version)
+        await archive.ready()
+      }
 
       const canonical = `hyper://${archive.key.toString('hex')}/${path || ''}`
       responseHeaders.append('Link', `<${canonical}>; rel="canonical"`)
@@ -120,7 +125,36 @@ module.exports = function makeFetch (opts = {}) {
       // We can say the file hasn't changed if the drive version hasn't changed
       responseHeaders.set('ETag', `"${archive.version}"`)
 
-      if (method === 'PUT') {
+      if (method === 'TAG') {
+        const { body } = opts
+        const name = (await concatPromise(bodyToStream(body, session))).toString('utf8')
+        const tagVersion = archive.version
+
+        await archive.createTag(name, tagVersion)
+        responseHeaders.set('Content-Type', 'text/plain; charset=utf-8')
+
+        return new FakeResponse(200, 'ok', responseHeaders, intoStream(`${tagVersion}`), url)
+      } else if (method === 'TAGS') {
+        const tags = await archive.getAllTags()
+
+        const tagsObject = {}
+        for (const [key, value] of tags) { tagsObject[key] = value }
+
+        const json = JSON.stringify(tagsObject, null, '\t')
+        responseHeaders.set('Content-Type', 'application/json; charset=utf-8')
+
+        return new FakeResponse(200, 'ok', responseHeaders, intoStream(Buffer.from(json)), url)
+      } else if (method === 'TAG-DELETE') {
+        await archive.deleteTag(version)
+
+        return new FakeResponse(200, 'ok', responseHeaders, intoStream(''), url)
+      } if (method === 'DOWNLOAD') {
+        await archive.download(path)
+        return new FakeResponse(200, 'ok', responseHeaders, intoStream(''), url)
+      } else if (method === 'CLEAR') {
+        await archive.clear(path)
+        return new FakeResponse(200, 'ok', responseHeaders, intoStream(''), url)
+      } else if (method === 'PUT') {
         checkWritable(archive)
         if (path.endsWith('/')) {
           await makeDir(path, { fs: archive })
@@ -191,6 +225,7 @@ module.exports = function makeFetch (opts = {}) {
 
           if (headers.get('Accept') === 'application/json') {
             const json = JSON.stringify(files, null, '\t')
+            responseHeaders.set('Content-Type', 'application/json; charset=utf-8')
             stream = intoStream(Buffer.from(json))
           } else {
             const page = `
@@ -204,7 +239,7 @@ module.exports = function makeFetch (opts = {}) {
         `).join('')}
         </ul>
       `
-            responseHeaders.set('Content-Type', 'text/html')
+            responseHeaders.set('Content-Type', 'text/html; charset=utf-8')
             const buffer = Buffer.from(page)
             stream = intoStream(buffer)
           }
