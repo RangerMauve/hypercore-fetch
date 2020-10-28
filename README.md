@@ -122,3 +122,23 @@ You can delete a file in an archive by using the `DELETE` method.
 You cannot delete directories if they are not empty.
 
 `NAME` can either be the 64 character hex key for an archive, a domain to parse with [dat-dns](https://www.npmjs.com/package/dat-dns), or a name for an archive which allows you to write to it.
+
+### `fetch('hyper://NAME/example.txt', {method: 'DOWNLOAD'})`
+
+You can download a file or an entire folder using the `DOWNLOAD` method.
+
+`NAME` can either be the 64 character hex key for an archive, a domain to parse with [dat-dns](https://www.npmjs.com/package/dat-dns), or a name for an archive which allows you to write to it.
+
+You can use `/` for the path to download the entire contents
+
+### `fetch('hyper://NAME/example.txt', {method: 'CLEAR'})`
+
+You can clear the data stored for a file using the `CLEAR` method.
+
+This is like the opposite of the `DOWNLOAD` method.
+
+This does not delete data, it only deletes the cached data from disk.
+
+`NAME` can either be the 64 character hex key for an archive, a domain to parse with [dat-dns](https://www.npmjs.com/package/dat-dns), or a name for an archive which allows you to write to it.
+
+You can use `/` for the path to clear all data for the archive.
