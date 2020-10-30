@@ -113,7 +113,7 @@ module.exports = function makeFetch (opts = {}) {
       if (version) {
         const tags = archive.getAllTags()
         const tagsObject = Object.fromEntries(tags)
-        archive = archive.checkout(tags[version])
+        archive = archive.checkout(tagsObject[version])
         await archive.ready()
       }
 
