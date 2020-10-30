@@ -95,26 +95,6 @@ async function test () {
 
   console.log('Bypassed resolve', await response8.text())
 
-  await checkOK(await fetch('hyper://example/', { method: 'TAG', body: 'tag1' }))
-
-  console.log('Tagged archive')
-
-  const response9 = await fetch('hyper://example/', { method: 'TAGS' })
-
-  const tags = await response9.json()
-
-  console.log('Got tags:', tags)
-
-  await fetch('hyper://example/shouldnotexist.txt', { method: 'PUT', body: 'Hell World' })
-
-  const response10 = await fetch('hyper://example+tag1/shouldnotexist.txt')
-
-  console.log('When checking out an old version, new files 404', response10.status)
-
-  await checkOK(await fetch('hyper://example+tag1/', { method: 'TAG-DELETE' }))
-
-  console.log('Deleted tag')
-
   // Tags
   console.log('TAG TESTS')
   await fetch('hyper://example/test.txt', {method:'PUT', body:'test'})
@@ -126,7 +106,7 @@ async function test () {
   testItem(
     await (await fetch('hyper://example/', {method: 'TAGS'})).json(),
     'Get tags',
-    {tag1: 11}
+    {tag1: 9}
   )
   testItem(
     await (await fetch('hyper://example+tag1/test.txt', {method: 'GET'})).text(),
