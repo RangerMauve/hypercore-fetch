@@ -111,7 +111,9 @@ module.exports = function makeFetch (opts = {}) {
       await archive.ready()
 
       if (version) {
-        archive = archive.checkout(version)
+        const tags = await archive.getAllTags()
+        const tagsObject = Object.fromEntries(tags)
+        archive = archive.checkout(tagsObject[version])
         await archive.ready()
       }
 
@@ -136,11 +138,9 @@ module.exports = function makeFetch (opts = {}) {
         return new FakeResponse(200, 'ok', responseHeaders, intoStream(`${tagVersion}`), url)
       } else if (method === 'TAGS') {
         const tags = await archive.getAllTags()
-
-        const tagsObject = {}
-        for (const [key, value] of tags) { tagsObject[key] = value }
-
+        const tagsObject = Object.fromEntries(tags)
         const json = JSON.stringify(tagsObject, null, '\t')
+
         responseHeaders.set('Content-Type', 'application/json; charset=utf-8')
 
         return new FakeResponse(200, 'ok', responseHeaders, intoStream(Buffer.from(json)), url)
