@@ -115,6 +115,36 @@ async function test () {
 
   console.log('Deleted tag')
 
+  // Tags
+  console.log('TAG TESTS')
+  await fetch('hyper://example/test.txt', {method:'PUT', body:'test'})
+  testItem(
+    (await fetch('hyper://example/', {method: 'TAG', body: 'tag1'})).status,
+    'Create tag',
+    200
+  )
+  testItem(
+    await (await fetch('hyper://example/', {method: 'TAGS'})).json(),
+    'Get tags',
+    {tag1: 11}
+  )
+  testItem(
+    await (await fetch('hyper://example+tag1/test.txt', {method: 'GET'})).text(),
+    'Access tag',
+    'test'
+  )
+  await fetch('hyper://example/notaccessible.txt', {method:'PUT', body:'test'})
+  testItem(
+    (await fetch('hyper://example+tag1/notaccessible.txt', {method: 'GET'})).status,
+    'Fetch new data from old tag',
+    404
+  )
+  testItem(
+    (await fetch('hyper://example+tag1/', {method: 'TAG-DELETE'})).status,
+    'Delete tag',
+    200
+  )
+
   await close()
 }
 
@@ -133,4 +163,11 @@ async function checkOK (response) {
   }
 
   return response
+}
+
+function testItem(value, testname, expected) {
+  value = JSON.stringify(value)
+  expected = JSON.stringify(expected)
+  if(expected && expected != value) console.log(`!!! ${testname} failed, expected ${expected}; got ${value} !!!`)
+  else console.log(`${testname} succeeded`)
 }
