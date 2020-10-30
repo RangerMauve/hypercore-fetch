@@ -111,7 +111,8 @@ module.exports = function makeFetch (opts = {}) {
       await archive.ready()
 
       if (version) {
-        const tags = Object.fromEntries(await new Promise(resolve => archive.getAllTags((err, result)=>{resolve(result)})))
+        const tags = archive.getAllTags()
+        const tagsObject = Object.fromEntries(tags)
         archive = archive.checkout(tags[version])
         await archive.ready()
       }
@@ -131,13 +132,14 @@ module.exports = function makeFetch (opts = {}) {
         const name = (await concatPromise(bodyToStream(body, session))).toString('utf8')
         const tagVersion = archive.version
 
-        archive.createTag(name, tagVersion, ()=>{})
+        await archive.createTag(name, tagVersion)
         responseHeaders.set('Content-Type', 'text/plain; charset=utf-8')
 
         return new FakeResponse(200, 'ok', responseHeaders, intoStream(`${tagVersion}`), url)
       } else if (method === 'TAGS') {
-        const tags = Object.fromEntries(await new Promise(resolve => archive.getAllTags((err, result)=>{resolve(result)})))
-        const json = JSON.stringify(tags, null, '\t')
+        const tags = await archive.getAllTags()
+        const tagsObject = Object.fromEntries(tags)
+        const json = JSON.stringify(tagsObject, null, '\t')
 
         responseHeaders.set('Content-Type', 'application/json; charset=utf-8')
 
