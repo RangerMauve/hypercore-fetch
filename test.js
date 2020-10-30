@@ -31,70 +31,90 @@ async function test () {
   console.log(text)
   console.log([...response.headers.entries()])
 
-  const url2 = 'hyper://example/example.txt'
-  const contents = 'Hello World'
+  const sampleContents = 'Hello World'
 
-  console.log('Putting into', url2, contents)
+  // Gets
+  console.log('\nGET TESTS')
+  testItem(
+    await (await fetch('hyper://example/.well-known/dat')).text(),
+    'Check well-known dat'
+  )
+  testItem(
+    (await fetch('hyper://example/checkthis.txt', {method: 'PUT', body: sampleContents})).status,
+    'Put file to check',
+    200
+  )
+  testItem(
+    await (await fetch('hyper://example/checkthis.txt', {method: 'GET'})).text(),
+    'Check written file',
+    sampleContents
+  )
 
-  await checkOK(await fetch(url2, { method: 'PUT', body: contents }))
+  // Puts
+  console.log('\nPUT TESTS')
+  testItem(
+    (await fetch('hyper://example/foo/bar/', {method: 'PUT'})).status,
+    'Put directories',
+    200
+  )
+  testItem(
+    (await fetch('hyper://example/fizz/buzz/example.txt', {method: 'PUT', body: sampleContents})).status,
+    'Put file under new directories',
+    200
+  )
+  testItem(
+    (await fetch('hyper://example/baz/index.html', {method: 'PUT', body: sampleContents})).status,
+    'Put file',
+    200
+  )
+  testItem(
+    (await fetch('hyper://example/baz/index.html', {method: 'PUT', body: sampleContents})).status,
+    'Put file over other',
+    200
+  )
 
-  console.log('Wrote to archive')
+  // Deletes
+  console.log('\nDELETE TESTS')
+  testItem(
+    (await fetch('hyper://example/test.txt', {method: 'PUT', body: sampleContents})).status,
+    'Create file for deletion',
+    200
+  )
+  testItem(
+    (await fetch('hyper://example/test.txt', {method: 'HEAD'})).status,
+    'Check file',
+    204
+  )
+  testItem(
+    (await fetch('hyper://example/test.txt', {method: 'DELETE'})).status,
+    'Delete file',
+    200
+  )
+  testItem(
+    (await fetch('hyper://example/test.txt', {method: 'GET'})).status,
+    'Deleted file',
+    404
+  )
 
-  const response2 = await fetch(url2)
-  await checkOK(response2)
-  const text2 = await response2.text()
+  // Directories
+  console.log('\nDIRECTORY TESTS')
+  testItem(
+    await (await fetch('hyper://example/baz')).text(),
+    'Resolve index',
+    sampleContents
+  )
+  testItem(
+    await (await fetch('hyper://example/baz', {headers: {'X-Resolve': 'none'}})).text(),
+    'Bypass resolve and recieve as JSON'
+  )
+  testItem(
+    await (await fetch('hyper://example/baz', {headers: {'X-Resolve': 'none', 'Accept': 'application/json'}})).json(),
+    'Bypass resolve and recieve as JSON',
+    ['index.html']
+  )
 
-  console.log('Read written data')
-  console.log(text2)
 
-  const url3 = 'hyper://example/'
-  const response3 = await fetch(url3, { headers: { Accept: 'application/json' } })
-  await checkOK(response3)
-  const text3 = await response3.text()
-
-  console.log('Directory listing after write')
-  console.log(text3)
-
-  await checkOK(await fetch(url2, { method: 'DELETE' }))
-
-  console.log('Deleted file')
-
-  const response4 = await fetch(url3)
-  await checkOK(response4)
-  const text4 = await response4.text()
-
-  console.log('Directory after delete')
-  console.log(text4)
-
-  const url4 = 'hyper://example/.well-known/dat'
-
-  const response5 = await fetch(url4)
-  await checkOK(response5)
-  const json = await response5.text()
-
-  console.log('Archive well-known URL', json)
-
-  const url5 = 'hyper://example/foo/bar/'
-  await checkOK(await fetch(url5, { method: 'PUT' }))
-
-  console.log('Created multiple folders')
-
-  const url6 = 'hyper://example/fizz/buzz/example.txt'
-  await checkOK(await fetch(url6, { method: 'PUT', body: contents }))
-
-  console.log('Created file along with parent folders')
-
-  const url7 = 'hyper://example/baz/index.html'
-  await checkOK(await fetch(url7, { method: 'PUT', body: contents }))
-
-  const response7 = await fetch('hyper://example/baz')
-
-  console.log('Resolved index', await response7.text())
-
-  const response8 = await fetch('hyper://example/baz', { headers: { 'X-Resolve': 'none' } })
-
-  console.log('Bypassed resolve', await response8.text())
-
+<<<<<<< Updated upstream
   await checkOK(await fetch('hyper://example/', { method: 'TAG', body: 'tag1' }))
 
   console.log('Tagged archive')
@@ -114,6 +134,37 @@ async function test () {
   await checkOK(await fetch('hyper://example+tag1/', { method: 'TAG-DELETE' }))
 
   console.log('Deleted tag')
+=======
+  // Tags
+  console.log('\nTAG TESTS')
+  await fetch('hyper://example/test.txt', {method:'PUT', body:'test'})
+  testItem(
+    (await fetch('hyper://example/', {method: 'TAG', body: 'tag1'})).status,
+    'Create tag',
+    200
+  )
+  testItem(
+    await (await fetch('hyper://example/', {method: 'TAGS'})).json(),
+    'Get tags',
+    {tag1: 11}
+  )
+  testItem(
+    await (await fetch('hyper://example+tag1/test.txt', {method: 'GET'})).text(),
+    'Access tag',
+    'test'
+  )
+  await fetch('hyper://example/notaccessible.txt', {method:'PUT', body:'test'})
+  testItem(
+    (await fetch('hyper://example+tag1/notaccessible.txt', {method: 'GET'})).status,
+    'Fetch new data from old tag',
+    404
+  )
+  testItem(
+    (await fetch('hyper://example+tag1/', {method: 'TAG-DELETE'})).status,
+    'Delete tag',
+    200
+  )
+>>>>>>> Stashed changes
 
   await close()
 }
@@ -134,3 +185,13 @@ async function checkOK (response) {
 
   return response
 }
+<<<<<<< Updated upstream
+=======
+
+function testItem(value, testname, expected) {
+  value = JSON.stringify(value)
+  expected = JSON.stringify(expected)
+  if(expected && expected != value) console.log(`!!! ${testname} failed, expected ${expected}; got ${value} !!!`)
+  else console.log(`${testname} ${expected ? 'succeeded' : 'assumed to have succeeded'}`)
+}
+>>>>>>> Stashed changes
