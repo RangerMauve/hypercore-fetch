@@ -10,6 +10,8 @@ const pump = require('pump-promise')
 const makeDir = require('make-dir')
 
 const DAT_REGEX = /\w+:\/\/([^/]+)\/?([^#?]*)?/
+const NUMBER_REGEX = /^\d+$/
+const PROTOCOL_REGEX = /^\w+:\/\//
 const NOT_WRITABLE_ERROR = 'Archive not writable'
 
 const READABLE_ALLOW = ['GET', 'HEAD', 'DOWNLOAD', 'CLEAR']
@@ -76,7 +78,7 @@ module.exports = function makeFetch (opts = {}) {
     }
 
     const isDatURL = url.startsWith('dat://') || url.startsWith('hyper://')
-    const urlHasProtocol = url.match(/^\w+:\/\//)
+    const urlHasProtocol = url.match(PROTOCOL_REGEX)
 
     const shouldIntercept = isDatURL || (!urlHasProtocol && isSourceDat)
 
@@ -111,7 +113,7 @@ module.exports = function makeFetch (opts = {}) {
       await archive.ready()
 
       if (version) {
-        if (!isNaN(version)) {
+        if (NUMBER_REGEX.test(version)) {
           archive = await archive.checkout(version)
         } else {
           archive = await archive.checkout(await archive.getTaggedVersion(version))
