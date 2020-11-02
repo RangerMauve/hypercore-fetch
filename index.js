@@ -111,7 +111,11 @@ module.exports = function makeFetch (opts = {}) {
       await archive.ready()
 
       if (version) {
-        archive = archive.checkout(await archive.getTaggedVersion(version))
+        if (!isNaN(version)) {
+          archive = await archive.checkout(version)
+        } else {
+          archive = await archive.checkout(await archive.getTaggedVersion(version))
+        }
         await archive.ready()
       }
 
