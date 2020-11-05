@@ -1,6 +1,6 @@
 {
   "name": "dat-fetch",
-  "version": "5.1.0",
+  "version": "5.1.1",
   "description": "Implementation of Fetch that uses the Dat SDK for loading p2p content",
   "bin": "bin.js",
   "main": "index.js",
