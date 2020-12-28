@@ -30,10 +30,12 @@
     "fetch-headers": "^2.0.0",
     "fetch-request-body-to-stream": "^1.0.0",
     "make-dir": "^3.1.0",
+    "make-fetch": "^2.2.1",
     "mime": "^2.4.4",
     "pump-promise": "^1.0.0",
     "range-parser": "^1.2.1",
-    "resolve-dat-path": "^1.2.0"
+    "resolve-dat-path": "^1.2.0",
+    "streamx": "^2.10.0"
   },
   "devDependencies": {
     "dat-sdk": "^2.8.1",
