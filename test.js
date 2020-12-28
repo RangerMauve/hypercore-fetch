@@ -125,7 +125,7 @@ async function test () {
     testItem(
       await (await fetch('hyper://example/', { method: 'TAGS' })).json(),
       'Get tags',
-      { tag1: 11 }
+      { tag1: 12 }
     )
     testItem(
       await (await fetch('hyper://example+tag1/test.txt', { method: 'GET' })).text(),
@@ -143,8 +143,6 @@ async function test () {
       'Delete tag',
       200
     )
-  } catch (e) {
-    console.log(e.stack)
   } finally {
     await close()
   }
@@ -158,18 +156,9 @@ test().then(() => {
   })
 })
 
-async function checkOK (response) {
-  if (!response.ok) {
-    const message = await response.text()
-    throw new Error(message)
-  }
-
-  return response
-}
-
 function testItem (value, testname, expected) {
   value = JSON.stringify(value)
   expected = JSON.stringify(expected)
-  if (expected && expected != value) console.log(`!!! ${testname} failed, expected ${expected}; got ${value} !!!`)
+  if (expected && expected !== value) console.log(`!!! ${testname} failed, expected ${expected}; got ${value} !!!`)
   else console.log(`${testname} ${expected ? 'succeeded' : 'assumed to have succeeded'}`)
 }

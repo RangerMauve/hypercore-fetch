@@ -4,7 +4,7 @@ const mime = require('mime/lite')
 const SDK = require('dat-sdk')
 const parseRange = require('range-parser')
 const makeDir = require('make-dir')
-const { Readable, pipelinePromise } = require('streamx')
+const { Readable, Writable, pipelinePromise } = require('streamx')
 const makeFetch = require('make-fetch')
 
 const DAT_REGEX = /\w+:\/\/([^/]+)\/?([^#?]*)?/
@@ -54,26 +54,19 @@ module.exports = function makeHyperFetch (opts = {}) {
       const resolve = await getResolve()
 
       try {
-      console.log('Resolving')
         key = await resolve(`dat://${key}`)
-      console.log('Resolved')
       } catch (e) {
         // Probably a domain that couldn't resolve
         if (key.includes('.')) throw e
       }
 
-      console.log('Getting drive')
       const Hyperdrive = await getHyperdrive()
-      console.log('Got')
 
       let archive = Hyperdrive(key)
 
-      console.log('Awaiting ready')
       await archive.ready()
-      console.log('Ready')
 
       if (version) {
-        console.log('Checking out version')
         if (NUMBER_REGEX.test(version)) {
           archive = await archive.checkout(version)
         } else {
@@ -146,15 +139,18 @@ module.exports = function makeHyperFetch (opts = {}) {
         } else {
           const parentDir = path.split('/').slice(0, -1).join('/')
           if (parentDir) {
-            console.log('Making dir')
             await makeDir(parentDir, { fs: archive })
           }
           // Create a new file from the request body
-          console.log('Getting source')
           const source = Readable.from(body)
           const destination = archive.createWriteStream(path)
-          console.log('Awaiting pipeline')
-          await pipelinePromise(source, destination)
+          // The sink is needed because Hyperdrive's write stream is duplex
+          const sink = new Writable({ write (_, cb) { cb() } })
+          await pipelinePromise(
+            source,
+            destination,
+            sink
+          )
         }
         return {
           statusCode: 200,
@@ -185,7 +181,6 @@ module.exports = function makeHyperFetch (opts = {}) {
         if (finalPath === '.well-known/dat') {
           const { key } = archive
           const entry = `dat://${key.toString('hex')}\nttl=3600`
-          console.log("Returning entry")
           return {
             statusCode: 200,
             headers: responseHeaders,
@@ -277,7 +272,7 @@ module.exports = function makeHyperFetch (opts = {}) {
 
         if (method === 'HEAD') {
           return {
-            statusCode: 200,
+            statusCode: 204,
             headers: responseHeaders,
             data: intoAsyncIterable('')
           }
@@ -315,7 +310,6 @@ module.exports = function makeHyperFetch (opts = {}) {
 
   function getHyperdrive () {
     if (Hyperdrive) return Hyperdrive
-    console.log('Loading hyperdrive')
     return getSDK().then(({ Hyperdrive }) => Hyperdrive)
   }
 
