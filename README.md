@@ -1,11 +1,11 @@
-# dat-fetch
+# hyper-fetch
 
-Implementation of Fetch that uses the Dat SDK for loading p2p content
+Implementation of Fetch that uses the Hyper SDK for loading p2p content
 
-`npm install --save dat-fetch`
+`npm install --save hyper-fetch`
 
 ```javascript
-const fetch = require('dat-fetch')()
+const fetch = require('hyper-fetch')()
 
 const someURL = `hyper://blog.mauve.moe`
 
@@ -19,20 +19,20 @@ console.log(json)
 You can also use the bundled CLI
 
 ```
-npm i -g dat-fetch
+npm i -g hyper-fetch
 
-dat-fetch dat://somethingorother
+hyper-fetch hyper://somethingorother
 
 # Or
 
-npx dat-fetch dat://somethingorother
+npx hyper-fetch hyper://somethingorother
 ```
 
 ## API
 
 ### `makeFetch({Hyperdrive, resolveName, base, session, writable}) => fetch()`
 
-Creates a dat-fetch instance.
+Creates a hyper-fetch instance.
 
 The `base` parameter can be used to specify what the base URL is for relative paths like `fetch('./dat.json')`.
 
