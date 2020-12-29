@@ -1,11 +1,11 @@
-# hyper-fetch
+# hypercore-fetch
 
 Implementation of Fetch that uses the Hyper SDK for loading p2p content
 
-`npm install --save hyper-fetch`
+`npm install --save hypercore-fetch`
 
 ```javascript
-const fetch = require('hyper-fetch')()
+const fetch = require('hypercore-fetch')()
 
 const someURL = `hyper://blog.mauve.moe`
 
@@ -19,20 +19,20 @@ console.log(json)
 You can also use the bundled CLI
 
 ```
-npm i -g hyper-fetch
+npm i -g hypercore-fetch
 
-hyper-fetch hyper://somethingorother
+hypercore-fetch hyper://somethingorother
 
 # Or
 
-npx hyper-fetch hyper://somethingorother
+npx hypercore-fetch hyper://somethingorother
 ```
 
 ## API
 
 ### `makeFetch({Hyperdrive, resolveName, base, session, writable}) => fetch()`
 
-Creates a hyper-fetch instance.
+Creates a hypercore-fetch instance.
 
 The `base` parameter can be used to specify what the base URL is for relative paths like `fetch('./dat.json')`.
 

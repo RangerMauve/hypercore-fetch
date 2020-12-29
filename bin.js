@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 const eosp = require('end-of-stream-promise')
+const {Readable} = require('streamx')
 
 run()
   .catch((e) => process.nextTick(() => {
@@ -15,9 +16,11 @@ async function run () {
 
     const response = await fetch(url)
 
-    response.body.pipe(process.stdout)
+    const stream = Readable.from(response.body)
 
-    await eosp(response.body)
+    stream.pipe(process.stdout)
+
+    await eosp(stream)
   } finally {
     fetch.close()
   }
