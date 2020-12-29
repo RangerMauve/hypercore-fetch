@@ -1,7 +1,7 @@
 const resolveDatPath = require('resolve-dat-path')
 const Headers = require('fetch-headers')
 const mime = require('mime/lite')
-const SDK = require('dat-sdk')
+const SDK = require('hyper-sdk')
 const parseRange = require('range-parser')
 const makeDir = require('make-dir')
 const { Readable, Writable, pipelinePromise } = require('streamx')
@@ -23,7 +23,7 @@ module.exports = function makeHyperFetch (opts = {}) {
   let gettingSDK = null
   let onClose = async () => undefined
 
-  const isSourceDat = base && (base.startsWith('dat://') || base.startsWith('hyper://'))
+  const isSourceDat = base && base.startsWith('hyper://')
 
   const fetch = makeFetch(hyperFetch)
 
@@ -32,12 +32,12 @@ module.exports = function makeHyperFetch (opts = {}) {
   return fetch
 
   async function hyperFetch ({ url, headers: rawHeaders, method, signal, body }) {
-    const isDatURL = url.startsWith('dat://') || url.startsWith('hyper://')
+    const isDatURL = url.startsWith('hyper://')
     const urlHasProtocol = url.match(PROTOCOL_REGEX)
 
     const shouldIntercept = isDatURL || (!urlHasProtocol && isSourceDat)
 
-    if (!shouldIntercept) throw new Error('Invalid protocol, must be dat:// or hyper://')
+    if (!shouldIntercept) throw new Error('Invalid protocol, must be hyper://')
 
     const headers = new Headers(rawHeaders || {})
 
@@ -86,6 +86,7 @@ module.exports = function makeHyperFetch (opts = {}) {
       responseHeaders.ETag = `"${archive.version}"`
 
       if (method === 'TAG') {
+        checkWritable(archive)
         const nameData = await collectBuffers(body)
         const name = nameData.toString('utf8')
         const tagVersion = archive.version
@@ -111,6 +112,7 @@ module.exports = function makeHyperFetch (opts = {}) {
           data: intoAsyncIterable(json)
         }
       } else if (method === 'TAG-DELETE') {
+        checkWritable(archive)
         await archive.deleteTag(version)
 
         return {

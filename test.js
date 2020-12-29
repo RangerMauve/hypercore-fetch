@@ -1,4 +1,4 @@
-const SDK = require('dat-sdk')
+const SDK = require('hyper-sdk')
 
 async function test () {
   const { Hyperdrive, resolveName, close } = await SDK({
@@ -18,7 +18,7 @@ async function test () {
       writable: true
     })
 
-    const url = `dat://${archive.key.toString('hex')}${FILE_LOCATION}`
+    const url = `hyper://${archive.key.toString('hex')}${FILE_LOCATION}`
 
     console.log('Fetching from', url)
 
@@ -151,9 +151,8 @@ async function test () {
 test().then(() => {
   process.exit(0)
 }, (e) => {
-  process.nextTick(() => {
-    throw e
-  })
+  console.error(e.stack)
+  process.exit(1)
 })
 
 function testItem (value, testname, expected) {
