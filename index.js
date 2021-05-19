@@ -179,9 +179,21 @@ module.exports = function makeHyperFetch (opts = {}) {
         let stat = null
         let finalPath = path
 
+        // Legacy DNS spec from Dat protocol: https://github.com/datprotocol/DEPs/blob/master/proposals/0005-dns.md
         if (finalPath === '.well-known/dat') {
           const { key } = archive
           const entry = `dat://${key.toString('hex')}\nttl=3600`
+          return {
+            statusCode: 200,
+            headers: responseHeaders,
+            data: intoAsyncIterable(entry)
+          }
+        }
+
+        // New spec from hyper-dns https://github.com/martinheidegger/hyper-dns
+        if (finalPath === '.well-known/hyper') {
+          const { key } = archive
+          const entry = `hyper://${key.toString('hex')}\nttl=3600`
           return {
             statusCode: 200,
             headers: responseHeaders,
