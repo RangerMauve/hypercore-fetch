@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 const eosp = require('end-of-stream-promise')
-const {Readable} = require('streamx')
+const { Readable } = require('streamx')
 
 run()
   .catch((e) => process.nextTick(() => {

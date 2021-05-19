@@ -45,7 +45,6 @@ module.exports = function makeHyperFetch (opts = {}) {
     responseHeaders['Access-Control-Allow-Origin'] = '*'
     responseHeaders['Allow-CSP-From'] = '*'
     responseHeaders['Access-Control-Allow-Headers'] = '*'
-    responseHeaders['Cache-Control'] = 'no-cache'
 
     try {
       let { path, key, version } = parseDatURL(url)
@@ -193,12 +192,12 @@ module.exports = function makeHyperFetch (opts = {}) {
           if (headers.get('X-Resolve') === 'none') {
             [stat] = await archive.stat(path)
           } else {
-            const resolved = await resolveDatPathAwait(archive, path)
+            const resolved = await resolveDatPath(archive, path)
             finalPath = resolved.path
             stat = resolved.stat
           }
         } catch (e) {
-          responseHeaders['content-type'] = 'text/plain'
+          responseHeaders['Content-Type'] = 'text/plain'
           return {
             statusCode: 404,
             headers: responseHeaders,
@@ -246,8 +245,10 @@ module.exports = function makeHyperFetch (opts = {}) {
             // Don't worry about it, it's optional.
           }
 
+          const { size } = stat
+          responseHeaders['Content-Length'] = `${size}`
+
           if (isRanged) {
-            const { size } = stat
             const ranges = parseRange(size, isRanged)
             if (ranges && ranges.length && ranges.type === 'bytes') {
               statusCode = 206
@@ -262,7 +263,6 @@ module.exports = function makeHyperFetch (opts = {}) {
                 })
               }
             } else {
-              responseHeaders['Content-Length'] = `${size}`
               if (method !== 'HEAD') {
                 data = archive.createReadStream(finalPath)
               }
@@ -318,7 +318,7 @@ module.exports = function makeHyperFetch (opts = {}) {
   function getSDK () {
     if (sdk) return Promise.resolve(sdk)
     if (gettingSDK) return gettingSDK
-    return SDK(opts).then((gotSDK) => {
+    gettingSDK = SDK(opts).then((gotSDK) => {
       sdk = gotSDK
       gettingSDK = null
       onClose = async () => sdk.close()
@@ -327,15 +327,8 @@ module.exports = function makeHyperFetch (opts = {}) {
 
       return sdk
     })
-  }
 
-  function resolveDatPathAwait (archive, path) {
-    return new Promise((resolve, reject) => {
-      resolveDatPath(archive, path, (err, resolved) => {
-        if (err) reject(err)
-        else resolve(resolved)
-      })
-    })
+    return gettingSDK
   }
 
   function checkWritable (archive) {
