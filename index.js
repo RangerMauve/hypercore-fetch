@@ -73,6 +73,14 @@ module.exports = function makeHyperFetch (opts = {}) {
 
       let archive = await Hyperdrive(key)
 
+      if (!archive) {
+        return {
+          statusCode: 404,
+          headers: responseHeaders,
+          data: intoAsyncIterable('Unknown drive')
+        }
+      }
+
       await archive.ready()
 
       if (!archive.version) {
@@ -234,7 +242,7 @@ module.exports = function makeHyperFetch (opts = {}) {
             stat = resolved.stat
           }
         } catch (e) {
-          responseHeaders['Content-Type'] = 'text/plain'
+          responseHeaders['Content-Type'] = 'text/plain; charset=utf-8'
           return {
             statusCode: 404,
             headers: responseHeaders,
@@ -396,7 +404,7 @@ async function collectBuffers (iterable) {
 }
 
 function getMimeType (path) {
-  let mimeType = mime.getType(path) || 'text/plain'
+  let mimeType = mime.getType(path) || 'text/plain; charset=utf-8'
   if (mimeType.startsWith('text/')) mimeType = `${mimeType}; charset=utf-8`
   return mimeType
 }
