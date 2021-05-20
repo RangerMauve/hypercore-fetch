@@ -71,7 +71,7 @@ module.exports = function makeHyperFetch (opts = {}) {
 
       const Hyperdrive = await getHyperdrive()
 
-      let archive = Hyperdrive(key)
+      let archive = await Hyperdrive(key)
 
       await archive.ready()
 
