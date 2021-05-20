@@ -16,8 +16,10 @@ const READABLE_ALLOW = ['GET', 'HEAD', 'TAGS', 'DOWNLOAD', 'CLEAR']
 const WRITABLE_ALLOW = ['PUT', 'DELETE', 'TAG', 'TAG-DELETE']
 const ALL_ALLOW = READABLE_ALLOW.concat(WRITABLE_ALLOW)
 
+const { resolveURL } = require('hyper-dns')
+
 module.exports = function makeHyperFetch (opts = {}) {
-  let { Hyperdrive, resolveName, base, writable = false } = opts
+  let { Hyperdrive, resolveName=resolveURL, base, writable = false } = opts
 
   let sdk = null
   let gettingSDK = null
@@ -50,10 +52,8 @@ module.exports = function makeHyperFetch (opts = {}) {
       let { path, key, version } = parseDatURL(url)
       if (!path) path = '/'
 
-      const resolve = await getResolve()
-
       try {
-        key = await resolve(`dat://${key}`)
+        key = await resolveName(`dat://${key}`)
       } catch (e) {
         // Probably a domain that couldn't resolve
         if (key.includes('.')) throw e
@@ -315,11 +315,6 @@ module.exports = function makeHyperFetch (opts = {}) {
         data: intoAsyncIterable(e.stack)
       }
     }
-  }
-
-  function getResolve () {
-    if (resolveName) return resolveName
-    return getSDK().then(({ resolveName }) => resolveName)
   }
 
   function getHyperdrive () {

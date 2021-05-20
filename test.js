@@ -41,6 +41,10 @@ async function test () {
       'Check well-known dat'
     )
     testItem(
+      await (await fetch('hyper://example/.well-known/hyoer')).text(),
+      'Check well-known hyper'
+    )
+    testItem(
       (await fetch('hyper://example/checkthis.txt', { method: 'PUT', body: sampleContents })).status,
       'Put file to check',
       200
@@ -141,6 +145,11 @@ async function test () {
     testItem(
       (await fetch('hyper://example+tag1/', { method: 'TAG-DELETE' })).status,
       'Delete tag',
+      200
+    )
+    testItem(
+      (await fetch('hyper://blog.mauve.moe/')).status,
+      'Load blog.mauve.moe website',
       200
     )
   } finally {
