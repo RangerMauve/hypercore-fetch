@@ -1,7 +1,7 @@
 const SDK = require('hyper-sdk')
 
 async function test () {
-  const { Hyperdrive, resolveName, close } = await SDK({
+  const { Hyperdrive, close } = await SDK({
     persist: false
   })
 
@@ -14,7 +14,6 @@ async function test () {
 
     const fetch = require('./')({
       Hyperdrive,
-      resolveName,
       writable: true
     })
 

@@ -7,6 +7,8 @@ const makeDir = require('make-dir')
 const { Readable, Writable, pipelinePromise } = require('streamx')
 const makeFetch = require('make-fetch')
 
+const DEFAULT_TIMEOUT = 5000
+
 const DAT_REGEX = /\w+:\/\/([^/]+)\/?([^#?]*)?/
 const NUMBER_REGEX = /^\d+$/
 const PROTOCOL_REGEX = /^\w+:\/\//
@@ -16,10 +18,17 @@ const READABLE_ALLOW = ['GET', 'HEAD', 'TAGS', 'DOWNLOAD', 'CLEAR']
 const WRITABLE_ALLOW = ['PUT', 'DELETE', 'TAG', 'TAG-DELETE']
 const ALL_ALLOW = READABLE_ALLOW.concat(WRITABLE_ALLOW)
 
-const { resolveURL } = require('hyper-dns')
+// TODO: Add caching support
+const { resolveURL: DEFAULT_RESOLVE_URL } = require('hyper-dns')
 
 module.exports = function makeHyperFetch (opts = {}) {
-  let { Hyperdrive, resolveName=resolveURL, base, writable = false } = opts
+  let {
+    Hyperdrive,
+    resolveURL = DEFAULT_RESOLVE_URL,
+    base,
+    timeout = DEFAULT_TIMEOUT,
+    writable = false
+  } = opts
 
   let sdk = null
   let gettingSDK = null
@@ -53,7 +62,8 @@ module.exports = function makeHyperFetch (opts = {}) {
       if (!path) path = '/'
 
       try {
-        key = await resolveName(`dat://${key}`)
+        const resolvedURL = await resolveURL(`hyper://${key}`)
+        key = resolvedURL.hostname
       } catch (e) {
         // Probably a domain that couldn't resolve
         if (key.includes('.')) throw e
@@ -64,6 +74,21 @@ module.exports = function makeHyperFetch (opts = {}) {
       let archive = Hyperdrive(key)
 
       await archive.ready()
+
+      if (!archive.version) {
+        if (!archive.peers.length) {
+          await new Promise((resolve, reject) => {
+            setTimeout(() => reject(new Error('Timed out looking for peers')), timeout)
+            archive.once('peer-open', resolve)
+          })
+        }
+        await new Promise((resolve, reject) => {
+          archive.metadata.update({ ifAvailable: true }, (err) => {
+            if (err) reject(err)
+            else resolve()
+          })
+        })
+      }
 
       if (version) {
         if (NUMBER_REGEX.test(version)) {
@@ -330,7 +355,6 @@ module.exports = function makeHyperFetch (opts = {}) {
       gettingSDK = null
       onClose = async () => sdk.close()
       Hyperdrive = sdk.Hyperdrive
-      resolveName = sdk.resolveName
 
       return sdk
     })

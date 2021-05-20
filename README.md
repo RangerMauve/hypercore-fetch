@@ -30,14 +30,14 @@ npx hypercore-fetch hyper://somethingorother
 
 ## API
 
-### `makeFetch({Hyperdrive, resolveName, base, session, writable}) => fetch()`
+### `makeFetch({Hyperdrive, resolveURL, base, session, writable}) => fetch()`
 
 Creates a hypercore-fetch instance.
 
 The `base` parameter can be used to specify what the base URL is for relative paths like `fetch('./dat.json')`.
 
 You can pass in options for the [Dat SDK](https://github.com/datproject/sdk) to have it be auto-created,
-or you can pass in both a function matching  `const archive = Hyperdrive(key)` and a `const resolved = await resolveName(url)` function.
+or you can pass in both a function matching  `const archive = Hyperdrive(key)` and a `const resolved = await resolveName(url)` function (where `resolved` is an instance of URL, uses hyper-dns by default).
 
 Set `session` to your Electron session if you want to enable setting the `body` of fetch requests to Electron's [UploadData](https://www.electronjs.org/docs/api/structures/upload-data) API in their protocol handlers.
 
