@@ -80,9 +80,11 @@ This will return some text which will have a `dat://` URL of your archive, follo
 
 When doing a `GET` on a directory, you will get a directory listing.
 
-By default it will render out an HTML page with links to files within that directory.
+By default it will return a JSON array of files and folders in that directory.
 
-You can set the `Accept` header to `application/json` in order to have it return a JSON array with file names.
+You can differentiate a folder from files by the fact that it ends with a `/`.
+
+You can set the `Accept` header to `text/html` in order to have it return a basic HTML page with links to files and folders in that directory.
 
 e.g.
 
@@ -94,12 +96,11 @@ Files in the directory will be listed under their name, sub-directories will hav
 
 `NAME` can either be the 64 character hex key for an archive, a domain to parse with [dat-dns](https://www.npmjs.com/package/dat-dns), or a name for an archive which allows you to write to it.
 
-### `fetch('hyper://NAME/example.txt', {method: 'GET', headers: {'X-Resolve': 'none'}})`
+### `fetch('hyper://NAME/example.txt?noResolve', {method: 'GET'})`
 
-Setting the `X-Resolve` header to `none` will prevent resolving `index.html` files and will attempt to load the path as is.
+
+Adding `?noResolve` to a URL will prevent resolving `index.html` files and will attempt to load the path as is.
 This can be useful for list files in a directory that would normally render as a page.
-
-You should omit the header for the default behavior, different values may be supported in the future.
 
 `NAME` can either be the 64 character hex key for an archive, a domain to parse with [dat-dns](https://www.npmjs.com/package/dat-dns), or a name for an archive which allows you to write to it.
 
@@ -123,19 +124,19 @@ You cannot delete directories if they are not empty.
 
 `NAME` can either be the 64 character hex key for an archive, a domain to parse with [dat-dns](https://www.npmjs.com/package/dat-dns), or a name for an archive which allows you to write to it.
 
-### `fetch('hyper://NAME/example.txt', {method: 'DOWNLOAD'})`
+### `fetch('hyper://NAME/example.txt', {method: 'GET', headers: {'x-download': 'cache'}})`
 
-You can download a file or an entire folder using the `DOWNLOAD` method.
+You can download a file or an entire folder to the local cache using the `x-download` header set to `cache` in a `GET` request.
 
 `NAME` can either be the 64 character hex key for an archive, a domain to parse with [dat-dns](https://www.npmjs.com/package/dat-dns), or a name for an archive which allows you to write to it.
 
 You can use `/` for the path to download the entire contents
 
-### `fetch('hyper://NAME/example.txt', {method: 'CLEAR'})`
+### `fetch('hyper://NAME/example.txt', {method: 'DELETE', headers: {'x-clear': 'cache'}})`
 
-You can clear the data stored for a file using the `CLEAR` method.
+You can clear the data stored in the local cache for a file or folder using the `x-clear` header set to `cache` in a `DELETE` request..
 
-This is like the opposite of the `DOWNLOAD` method.
+This is like the opposite of using `x-download` to download data.
 
 This does not delete data, it only deletes the cached data from disk.
 
@@ -143,24 +144,36 @@ This does not delete data, it only deletes the cached data from disk.
 
 You can use `/` for the path to clear all data for the archive.
 
-### `fetch('hyper://NAME/`, {method: 'TAG', body: 'Tag name here'})`
+### `fetch('hyper://NAME/$/tags/tagName', {method: 'PUT'})`
 
-You can add a tag a version of the archive with a human readable name (like SPAGHETTI).
+You can add a tag a version of the archive with a human readable name (like SPAGHETTI), in the example represented as `tagName` by doing a PUT into the special `/$/tags/` folder.
 
-You can place the name of the tag into the `body` of the request.
+Afterwards you can load the archive at that given version with `hyper://NAME+TAG_NAME`.
 
-Afterwards you can load the archive at that given version with `hyper://NAME+TAG_NAME`. E.g. `hyper://123kjh213kjh123+v4.20/example.txt`
+E.g.
 
-### `fetch('hyper://NAME/', {method: 'TAGS'})`
+`PUT hyper://123kjh213kjh123/$/tags/v4.20`
+`GET hyper://123kjh213kjh123+v4.20/example.txt`
 
-You can get a list of all tags using the `TAGS` method.
+### `fetch('hyper://NAME/$/tags/', {method: 'GET'})`
+
+You can get a list of all tags by doing a `GET` on the `/$/tags/` folder.
 
 The response will be a JSON object which maps tag names to archive versions.
 
 Use `await response.json()` to get the data out.
 
-### `fetch('hyper://NAME+TAG_NAME/', {method: 'TAG-DELETE'})`
+e.g.
 
-You can delete a given tag with the `TAG-DELETE` method.
+```json
+{
+  "tagOne": 1,
+  "example": 100000
+}
+```
+
+### `fetch('hyper://NAME/$/tags/tagName', {method: 'DELETE'})`
+
+You can delete a given tag with the `DELETE` method on a name within the special `$/tags/` folder.
 
 Specify the tag you want in the URL, and it'll be removed from the tags list.

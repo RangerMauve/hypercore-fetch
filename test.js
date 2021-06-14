@@ -1,171 +1,157 @@
 const SDK = require('hyper-sdk')
+const test = require('tape')
 
-async function test () {
+runTests()
+
+const SAMPLE_CONTENT = 'Hello World'
+
+async function runTests () {
   const { Hyperdrive, close } = await SDK({
     persist: false
   })
 
-  try {
-    const archive = Hyperdrive('example')
+  const fetch = require('./')({
+    Hyperdrive,
+    writable: true
+  })
+
+  test.onFinish(close)
+
+  test('Read index.html', async (t) => {
+    const archive = Hyperdrive('example1')
 
     const FILE_LOCATION = '/index.html'
+    const FILE_DATA = '<h1>Hello World!</h1>'
 
-    await archive.writeFile(FILE_LOCATION, '<h1>Hello World!</h1>')
-
-    const fetch = require('./')({
-      Hyperdrive,
-      writable: true
-    })
+    await archive.writeFile(FILE_LOCATION, FILE_DATA)
 
     const url = `hyper://${archive.key.toString('hex')}${FILE_LOCATION}`
 
-    console.log('Fetching from', url)
+    t.pass('Prepped archive ' + url)
 
     const response = await fetch(url)
 
+    t.pass('got response')
+
     const text = await response.text()
+
+    t.pass('got response text')
 
     const contentType = response.headers.get('content-type')
 
-    console.log(contentType)
-    console.log(text)
-    console.log([...response.headers.entries()])
+    t.equal(contentType, 'text/html; charset=utf-8')
+    t.equal(text, FILE_DATA)
+    t.pass('Headers ' + [...response.headers.entries()])
+  })
 
-    const sampleContents = 'Hello World'
+  test('GET .well-known/dat', async (t) => {
+    const response = await fetch('hyper://example/.well-known/dat')
+    t.ok(response, 'Got response')
+    t.equal(response.status, 200, 'Got OK response code')
+    const text = await response.text()
+    t.ok(text.startsWith('dat://'), 'Returned dat URL')
+  })
 
-    // Gets
-    console.log('\nGET TESTS')
-    testItem(
-      await (await fetch('hyper://example/.well-known/dat')).text(),
-      'Check well-known dat'
-    )
-    testItem(
-      await (await fetch('hyper://example/.well-known/hyoer')).text(),
-      'Check well-known hyper'
-    )
-    testItem(
-      (await fetch('hyper://example/checkthis.txt', { method: 'PUT', body: sampleContents })).status,
-      'Put file to check',
-      200
-    )
-    testItem(
-      await (await fetch('hyper://example/checkthis.txt', { method: 'GET' })).text(),
-      'Check written file',
-      sampleContents
-    )
+  test('GET .well-known/hyper', async (t) => {
+    const response = await fetch('hyper://example/.well-known/hyper')
+    t.ok(response, 'Got response')
+    t.equal(response.status, 200, 'Got OK response code')
+    const text = await response.text()
+    t.ok(text.startsWith('hyper://'), 'Returned dat URL')
+  })
 
-    // Puts
-    console.log('\nPUT TESTS')
-    testItem(
-      (await fetch('hyper://example/foo/bar/', { method: 'PUT' })).status,
-      'Put directories',
-      200
-    )
-    testItem(
-      (await fetch('hyper://example/fizz/buzz/example.txt', { method: 'PUT', body: sampleContents })).status,
-      'Put file under new directories',
-      200
-    )
-    testItem(
-      (await fetch('hyper://example/baz/index.html', { method: 'PUT', body: sampleContents })).status,
-      'Put file',
-      200
-    )
-    testItem(
-      (await fetch('hyper://example/baz/index.html', { method: 'PUT', body: sampleContents })).status,
-      'Put file over other',
-      200
-    )
+  test('PUT file', async (t) => {
+    const response1 = await fetch('hyper://example/checkthis.txt', { method: 'PUT', body: SAMPLE_CONTENT })
 
-    // Deletes
-    console.log('\nDELETE TESTS')
-    testItem(
-      (await fetch('hyper://example/test.txt', { method: 'PUT', body: sampleContents })).status,
-      'Create file for deletion',
-      200
-    )
-    testItem(
-      (await fetch('hyper://example/test.txt', { method: 'HEAD' })).status,
-      'Check file',
-      204
-    )
-    testItem(
-      (await fetch('hyper://example/test.txt', { method: 'DELETE' })).status,
-      'Delete file',
-      200
-    )
-    testItem(
-      (await fetch('hyper://example/test.txt', { method: 'GET' })).status,
-      'Deleted file',
-      404
-    )
+    t.equal(response1.status, 200, 'Got OK response on write')
 
-    // Directories
-    console.log('\nDIRECTORY TESTS')
-    testItem(
-      await (await fetch('hyper://example/baz')).text(),
-      'Resolve index',
-      sampleContents
-    )
-    testItem(
-      await (await fetch('hyper://example/baz', { headers: { 'X-Resolve': 'none' } })).text(),
-      'Bypass resolve and recieve as JSON'
-    )
-    testItem(
-      await (await fetch('hyper://example/baz', { headers: { 'X-Resolve': 'none', Accept: 'application/json' } })).json(),
-      'Bypass resolve and recieve as JSON',
-      ['index.html']
-    )
+    const response2 = await fetch('hyper://example/checkthis.txt')
 
-    // Tags
-    console.log('\nTAG TESTS')
-    await fetch('hyper://example/test.txt', { method: 'PUT', body: 'test' })
-    testItem(
-      (await fetch('hyper://example/', { method: 'TAG', body: 'tag1' })).status,
-      'Create tag',
-      200
-    )
-    testItem(
-      await (await fetch('hyper://example/', { method: 'TAGS' })).json(),
-      'Get tags',
-      { tag1: 12 }
-    )
-    testItem(
-      await (await fetch('hyper://example+tag1/test.txt', { method: 'GET' })).text(),
-      'Access tag',
-      'test'
-    )
+    t.equal(response2.status, 200, 'Got OK response on read')
+
+    t.equal(await response2.text(), SAMPLE_CONTENT, 'Read back written data')
+  })
+
+  test('PUT directory', async (t) => {
+    const response1 = await fetch('hyper://example/foo/bar/', { method: 'PUT' })
+
+    t.equal(response1.status, 200, 'Got OK response on directory creation')
+  })
+
+  test('PUT file in new directory', async (t) => {
+    const response1 = await fetch('hyper://example/fizz/buzz/example.txt', { method: 'PUT', body: SAMPLE_CONTENT })
+
+    t.equal(response1.status, 200, 'Got OK response on directory/file creation')
+  })
+
+  test('PUT to overwrite a file', async (t) => {
+    const response1 = await fetch('hyper://example/baz/index.html', { method: 'PUT', body: SAMPLE_CONTENT })
+    t.ok(response1.ok)
+    const response2 = await fetch('hyper://example/baz/index.html', { method: 'PUT', body: SAMPLE_CONTENT })
+
+    t.equal(response2.status, 200, 'Got OK response on file overwrite')
+  })
+
+  test('DELETE file', async (t) => {
+    const response1 = await fetch('hyper://example/test.txt', { method: 'PUT', body: SAMPLE_CONTENT })
+    t.ok(response1.ok)
+
+    const response2 = await fetch('hyper://example/test.txt', { method: 'DELETE' })
+
+    t.equal(response2.status, 200, 'Got OK response on file delete')
+
+    const response3 = await fetch('hyper://example/test.txt', { method: 'GET' })
+
+    t.equal(response3.status, 404, 'Got not found on deleted file')
+  })
+
+  test('GET index.html', async (t) => {
+    const response1 = await fetch('hyper://example/baz')
+
+    t.equal(await response1.text(), SAMPLE_CONTENT, 'Got index.html content')
+
+    const response2 = await fetch('hyper://example/baz?noResolve')
+
+    t.equal(response2.headers.get('content-type'), 'application/json; charset=utf-8', 'noResolve flag yields JSON by default')
+    t.deepEqual(await response2.json(), ['index.html'], 'Listed directory')
+
+    const response3 = await fetch('hyper://example/baz?noResolve')
+    t.equal(response3.headers.get('content-type'), 'application/json; charset=utf-8', 'noResolve flag yields JSON by default')
+    t.deepEqual(await response3.json(), ['index.html'], 'Listed directory')
+  })
+
+  test('Create and read tags', async (t) => {
+    await fetch('hyper://example/test.txt', { method: 'PUT', body: SAMPLE_CONTENT })
+
+    const response2 = await fetch('hyper://example/$/tags/tag1', { method: 'PUT' })
+    t.ok(response2.ok, 'Able to create tag')
+
+    const version = await response2.json()
+
+    const response3 = await fetch('hyper://example/$/tags/')
+
+    t.ok(response3.ok, 'Able to ask for tags')
+    t.deepEqual(await response3.json(), { tag1: version }, 'Tag got created')
+
+    // Insert a file which won't be available with the old tag
     await fetch('hyper://example/notaccessible.txt', { method: 'PUT', body: 'test' })
-    testItem(
-      (await fetch('hyper://example+tag1/notaccessible.txt', { method: 'GET' })).status,
-      'Fetch new data from old tag',
-      404
-    )
-    testItem(
-      (await fetch('hyper://example+tag1/', { method: 'TAG-DELETE' })).status,
-      'Delete tag',
-      200
-    )
-    testItem(
-      (await fetch('hyper://blog.mauve.moe/')).status,
-      'Load blog.mauve.moe website',
-      200
-    )
-  } finally {
-    await close()
-  }
-}
 
-test().then(() => {
-  process.exit(0)
-}, (e) => {
-  console.error(e.stack)
-  process.exit(1)
-})
+    const response4 = await fetch('hyper://example+tag1/notaccessible.txt')
 
-function testItem (value, testname, expected) {
-  value = JSON.stringify(value)
-  expected = JSON.stringify(expected)
-  if (expected && expected !== value) console.log(`!!! ${testname} failed, expected ${expected}; got ${value} !!!`)
-  else console.log(`${testname} ${expected ? 'succeeded' : 'assumed to have succeeded'}`)
+    t.equal(response4.status, 404, 'Newer file not found in older tag')
+
+    const response5 = await fetch('hyper://example/$/tags/tag1', { method: 'DELETE' })
+
+    t.ok(response5.ok, 'Able to delete tag')
+
+    const response6 = await fetch('hyper://example/$/tags/')
+
+    t.deepEqual(await response6.json(), {}, 'No tags left after delete')
+  })
+
+  test('Load Mauve\'s blog', async (t) => {
+    const response = await fetch('hyper://blog.mauve.moe/')
+
+    t.ok(response.ok, 'Succesfully loaded homepage')
+  })
 }

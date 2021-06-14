@@ -9,14 +9,16 @@ const makeFetch = require('make-fetch')
 
 const DEFAULT_TIMEOUT = 5000
 
-const DAT_REGEX = /\w+:\/\/([^/]+)\/?([^#?]*)?/
 const NUMBER_REGEX = /^\d+$/
 const PROTOCOL_REGEX = /^\w+:\/\//
 const NOT_WRITABLE_ERROR = 'Archive not writable'
 
-const READABLE_ALLOW = ['GET', 'HEAD', 'TAGS', 'DOWNLOAD', 'CLEAR']
-const WRITABLE_ALLOW = ['PUT', 'DELETE', 'TAG', 'TAG-DELETE']
+const READABLE_ALLOW = ['GET', 'HEAD']
+const WRITABLE_ALLOW = ['PUT', 'DELETE']
 const ALL_ALLOW = READABLE_ALLOW.concat(WRITABLE_ALLOW)
+
+const SPECIAL_FOLDER = '/$/'
+const TAGS_FOLDER = `${SPECIAL_FOLDER}tags/`
 
 // TODO: Add caching support
 const { resolveURL: DEFAULT_RESOLVE_URL } = require('hyper-dns')
@@ -58,8 +60,9 @@ module.exports = function makeHyperFetch (opts = {}) {
     responseHeaders['Access-Control-Allow-Headers'] = '*'
 
     try {
-      let { path, key, version } = parseDatURL(url)
+      let { pathname: path, key, version, searchParams } = parseDatURL(url)
       if (!path) path = '/'
+      if (!path.startsWith('/')) path = '/' + path
 
       try {
         const resolvedURL = await resolveURL(`hyper://${key}`)
@@ -117,56 +120,115 @@ module.exports = function makeHyperFetch (opts = {}) {
       // We can say the file hasn't changed if the drive version hasn't changed
       responseHeaders.ETag = `"${archive.version}"`
 
-      if (method === 'TAG') {
-        checkWritable(archive)
-        const nameData = await collectBuffers(body)
-        const name = nameData.toString('utf8')
-        const tagVersion = archive.version
+      if (path.startsWith(SPECIAL_FOLDER)) {
+        if (path === SPECIAL_FOLDER) {
+          const files = [
+          // TODO: Add more special folders here
+            'tags/'
+          ]
+          let data = null
+          if (headers.get('Accept') && headers.get('Accept').includes('text/html')) {
+            const page = renderDirectory(url, path, files)
+            responseHeaders['Content-Type'] = 'text/html; charset=utf-8'
+            data = intoAsyncIterable(page)
+          } else {
+            const json = JSON.stringify(files, null, '\t')
+            responseHeaders['Content-Type'] = 'application/json; charset=utf-8'
+            data = intoAsyncIterable(json)
+          }
+          if (method === 'HEAD') {
+            return {
+              statusCode: 204,
+              headers: responseHeaders,
+              data: intoAsyncIterable('')
+            }
+          } else {
+            return {
+              statusCode: 200,
+              headers: responseHeaders,
+              data
+            }
+          }
+        } else if (path.startsWith(TAGS_FOLDER)) {
+          if (method === 'GET') {
+            if (path === TAGS_FOLDER) {
+              const tags = await archive.getAllTags()
+              const tagsObject = Object.fromEntries(tags)
+              const json = JSON.stringify(tagsObject, null, '\t')
 
-        await archive.createTag(name, tagVersion)
-        responseHeaders['Content-Type'] = 'text/plain; charset=utf-8'
+              responseHeaders['Content-Type'] = 'application/json; charset=utf-8'
 
-        return {
-          statusCode: 200,
-          headers: responseHeaders,
-          data: intoAsyncIterable(`${tagVersion}`)
-        }
-      } else if (method === 'TAGS') {
-        const tags = await archive.getAllTags()
-        const tagsObject = Object.fromEntries(tags)
-        const json = JSON.stringify(tagsObject, null, '\t')
+              return {
+                statusCode: 200,
+                headers: responseHeaders,
+                data: intoAsyncIterable(json)
+              }
+            } else {
+              const tagName = path.slice(TAGS_FOLDER.length)
+              try {
+                const tagVersion = await archive.getTaggedVersion(tagName)
 
-        responseHeaders['Content-Type'] = 'application/json; charset=utf-8'
+                return {
+                  statusCode: 200,
+                  headers: responseHeaders,
+                  data: intoAsyncIterable(`${tagVersion}`)
+                }
+              } catch {
+                return {
+                  statusCode: 404,
+                  headers: responseHeaders,
+                  data: intoAsyncIterable('Tag Not Found')
+                }
+              }
+            }
+          } else if (method === 'DELETE') {
+            checkWritable(archive)
+            const tagName = path.slice(TAGS_FOLDER.length)
+            await archive.deleteTag(tagName || version)
+            responseHeaders.ETag = `"${archive.version}"`
 
-        return {
-          statusCode: 200,
-          headers: responseHeaders,
-          data: intoAsyncIterable(json)
-        }
-      } else if (method === 'TAG-DELETE') {
-        checkWritable(archive)
-        await archive.deleteTag(version)
+            return {
+              statusCode: 200,
+              headers: responseHeaders,
+              data: intoAsyncIterable('')
+            }
+          } else if (method === 'PUT') {
+            checkWritable(archive)
+            const tagName = path.slice(TAGS_FOLDER.length)
+            const tagVersion = archive.version
 
-        return {
-          statusCode: 200,
-          headers: responseHeaders,
-          data: intoAsyncIterable('')
+            await archive.createTag(tagName, tagVersion)
+            responseHeaders['Content-Type'] = 'text/plain; charset=utf-8'
+            responseHeaders.ETag = `"${archive.version}"`
+
+            return {
+              statusCode: 200,
+              headers: responseHeaders,
+              data: intoAsyncIterable(`${tagVersion}`)
+            }
+          } else if (method === 'HEAD') {
+            return {
+              statusCode: 204,
+              headers: responseHeaders,
+              data: intoAsyncIterable('')
+            }
+          } else {
+            return {
+              statusCode: 405,
+              headers: responseHeaders,
+              data: intoAsyncIterable('Method Not Allowed')
+            }
+          }
+        } else {
+          return {
+            statusCode: 404,
+            headers: responseHeaders,
+            data: intoAsyncIterable('Not Found')
+          }
         }
-      } if (method === 'DOWNLOAD') {
-        await archive.download(path)
-        return {
-          statusCode: 200,
-          headers: responseHeaders,
-          data: intoAsyncIterable('')
-        }
-      } else if (method === 'CLEAR') {
-        await archive.clear(path)
-        return {
-          statusCode: 200,
-          headers: responseHeaders,
-          data: intoAsyncIterable('')
-        }
-      } else if (method === 'PUT') {
+      }
+
+      if (method === 'PUT') {
         checkWritable(archive)
         if (path.endsWith('/')) {
           await makeDir(path, { fs: archive })
@@ -186,34 +248,51 @@ module.exports = function makeHyperFetch (opts = {}) {
             sink
           )
         }
+        responseHeaders.ETag = `"${archive.version}"`
+
         return {
           statusCode: 200,
           headers: responseHeaders,
           data: intoAsyncIterable('')
         }
       } else if (method === 'DELETE') {
-        checkWritable(archive)
-
-        const stats = await archive.stat(path)
-        // Weird stuff happening up in here...
-        const stat = Array.isArray(stats) ? stats[0] : stats
-
-        if (stat.isDirectory()) {
-          await archive.rmdir(path)
+        if (headers.get('x-clear') === 'cache') {
+          await archive.clear(path)
+          return {
+            statusCode: 200,
+            headers: responseHeaders,
+            data: intoAsyncIterable('')
+          }
         } else {
-          await archive.unlink(path)
-        }
-        return {
-          statusCode: 200,
-          headers: responseHeaders,
-          data: intoAsyncIterable('')
+          checkWritable(archive)
+
+          const stats = await archive.stat(path)
+          // Weird stuff happening up in here...
+          const stat = Array.isArray(stats) ? stats[0] : stats
+
+          if (stat.isDirectory()) {
+            await archive.rmdir(path)
+          } else {
+            await archive.unlink(path)
+          }
+          responseHeaders.ETag = `"${archive.version}"`
+
+          return {
+            statusCode: 200,
+            headers: responseHeaders,
+            data: intoAsyncIterable('')
+          }
         }
       } else if ((method === 'GET') || (method === 'HEAD')) {
         let stat = null
         let finalPath = path
 
+        if (headers.get('x-download') === 'cache') {
+          await archive.download(path)
+        }
+
         // Legacy DNS spec from Dat protocol: https://github.com/datprotocol/DEPs/blob/master/proposals/0005-dns.md
-        if (finalPath === '.well-known/dat') {
+        if (finalPath === '/.well-known/dat') {
           const { key } = archive
           const entry = `dat://${key.toString('hex')}\nttl=3600`
           return {
@@ -224,7 +303,7 @@ module.exports = function makeHyperFetch (opts = {}) {
         }
 
         // New spec from hyper-dns https://github.com/martinheidegger/hyper-dns
-        if (finalPath === '.well-known/hyper') {
+        if (finalPath === '/.well-known/hyper') {
           const { key } = archive
           const entry = `hyper://${key.toString('hex')}\nttl=3600`
           return {
@@ -234,7 +313,7 @@ module.exports = function makeHyperFetch (opts = {}) {
           }
         }
         try {
-          if (headers.get('X-Resolve') === 'none') {
+          if (searchParams.has('noResolve')) {
             [stat] = await archive.stat(path)
           } else {
             const resolved = await resolveDatPath(archive, path)
@@ -260,24 +339,14 @@ module.exports = function makeHyperFetch (opts = {}) {
           const stats = await archive.readdir(finalPath, { includeStats: true })
           const files = stats.map(({ stat, name }) => (stat.isDirectory() ? `${name}/` : name))
 
-          if (headers.get('Accept') === 'application/json') {
+          if (headers.get('Accept') && headers.get('Accept').includes('text/html')) {
+            const page = renderDirectory(url, path, files)
+            responseHeaders['Content-Type'] = 'text/html; charset=utf-8'
+            data = intoAsyncIterable(page)
+          } else {
             const json = JSON.stringify(files, null, '\t')
             responseHeaders['Content-Type'] = 'application/json; charset=utf-8'
             data = intoAsyncIterable(json)
-          } else {
-            const page = `
-        <!DOCTYPE html>
-        <title>${url}</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <h1>Index of ${path}</h1>
-        <ul>
-          <li><a href="../">../</a></li>${files.map((file) => `
-          <li><a href="${file}">./${file}</a></li>
-        `).join('')}
-        </ul>
-      `
-            responseHeaders['Content-Type'] = 'text/html; charset=utf-8'
-            data = intoAsyncIterable(page)
           }
         } else {
           responseHeaders['Accept-Ranges'] = 'bytes'
@@ -379,32 +448,36 @@ module.exports = function makeHyperFetch (opts = {}) {
 }
 
 function parseDatURL (url) {
-  let [, key, path] = url.toString().match(DAT_REGEX)
+  const parsed = new URL(url)
+  let key = parsed.hostname
   let version = null
   if (key.includes('+')) [key, version] = key.split('+')
 
-  return {
-    key,
-    path,
-    version
-  }
+  parsed.key = key
+  parsed.version = version
+
+  return parsed
 }
 
 async function * intoAsyncIterable (data) {
   yield Buffer.from(data)
 }
 
-async function collectBuffers (iterable) {
-  const all = []
-  for await (const buff of iterable) {
-    all.push(Buffer.from(buff))
-  }
-
-  return Buffer.concat(all)
-}
-
 function getMimeType (path) {
   let mimeType = mime.getType(path) || 'text/plain; charset=utf-8'
   if (mimeType.startsWith('text/')) mimeType = `${mimeType}; charset=utf-8`
   return mimeType
+}
+
+function renderDirectory (url, path, files) {
+  return `<!DOCTYPE html>
+<title>${url}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<h1>Index of ${path}</h1>
+<ul>
+  <li><a href="../">../</a></li>${files.map((file) => `
+  <li><a href="${file}">./${file}</a></li>
+`).join('')}
+</ul>
+`
 }
