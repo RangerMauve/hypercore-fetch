@@ -314,7 +314,8 @@ module.exports = function makeHyperFetch (opts = {}) {
         }
         try {
           if (searchParams.has('noResolve')) {
-            [stat] = await archive.stat(path)
+            const stats = await archive.stat(path)
+            stat = stats[0]
           } else {
             const resolved = await resolveDatPath(archive, path)
             finalPath = resolved.path
