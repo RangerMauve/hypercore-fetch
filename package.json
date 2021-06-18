@@ -1,6 +1,6 @@
 {
   "name": "hypercore-fetch",
-  "version": "8.0.0-0",
+  "version": "8.0.0-1",
   "description": "Implementation of Fetch that uses the Dat SDK for loading p2p content",
   "bin": {
     "hypercore-fetch": "bin.js"
