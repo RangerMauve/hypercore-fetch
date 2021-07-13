@@ -4,7 +4,7 @@ const mime = require('mime/lite')
 const SDK = require('hyper-sdk')
 const parseRange = require('range-parser')
 const makeDir = require('make-dir')
-const { Readable, Writable, pipelinePromise } = require('streamx')
+const { Readable } = require('streamx')
 const makeFetch = require('make-fetch')
 
 const DEFAULT_TIMEOUT = 5000
@@ -110,7 +110,7 @@ module.exports = function makeHyperFetch (opts = {}) {
         await archive.ready()
       }
 
-      const canonical = `hyper://${archive.key.toString('hex')}/${path || ''}`
+      const canonical = `hyper://${archive.key.toString('hex')}${path || ''}`
       responseHeaders.Link = `<${canonical}>; rel="canonical"`
 
       const isWritable = writable && archive.writable
@@ -237,16 +237,18 @@ module.exports = function makeHyperFetch (opts = {}) {
           if (parentDir) {
             await makeDir(parentDir, { fs: archive })
           }
-          // Create a new file from the request body
+
           const source = Readable.from(body)
           const destination = archive.createWriteStream(path)
           // The sink is needed because Hyperdrive's write stream is duplex
-          const sink = new Writable({ write (_, cb) { cb() } })
-          await pipelinePromise(
-            source,
-            destination,
-            sink
-          )
+
+          source.pipe(destination)
+
+          await Promise.race([
+            once(source, 'error'),
+            once(destination, 'error'),
+            once(source, 'end')
+          ])
         }
         responseHeaders.ETag = `"${archive.version}"`
 
@@ -331,12 +333,14 @@ module.exports = function makeHyperFetch (opts = {}) {
         }
 
         responseHeaders['Content-Type'] = getMimeType(finalPath)
+        responseHeaders['Last-Modified'] = stat.mtime.toUTCString()
 
         let data = null
         const isRanged = headers.get('Range') || headers.get('range')
         let statusCode = 200
 
         if (stat.isDirectory()) {
+          responseHeaders['x-is-directory'] = 'true'
           const stats = await archive.readdir(finalPath, { includeStats: true })
           const files = stats.map(({ stat, name }) => (stat.isDirectory() ? `${name}/` : name))
 
@@ -481,4 +485,12 @@ function renderDirectory (url, path, files) {
 `).join('')}
 </ul>
 `
+}
+
+function once (ee, name) {
+  return new Promise((resolve, reject) => {
+    const isError = name === 'error'
+    const cb = isError ? reject : resolve
+    ee.once(name, cb)
+  })
 }
