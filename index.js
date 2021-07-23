@@ -305,7 +305,7 @@ module.exports = function makeHyperFetch (opts = {}) {
               while (true) {
                 const version = await lastPromise()
                 yield `id: ${version}
-event: changed
+event:change
 data: ${JSON.stringify(version)}
 
 `
