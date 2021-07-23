@@ -154,4 +154,28 @@ async function runTests () {
 
     t.ok(response.ok, 'Succesfully loaded homepage')
   })
+
+  test('Watch for changes', async (t) => {
+    const response = await fetch('hyper://example/', {
+      headers: {
+        Accept: 'text/event-stream'
+      }
+    })
+
+    t.ok(response.ok, 'Able to open request')
+    t.equal(response.headers.get('Content-Type'), 'text/event-stream', 'Response is event stream')
+
+    const reader = await response.body.getReader()
+
+    const [data] = await Promise.all([
+      reader.read(),
+      fetch('hyper://example/example4.txt', { method: 'PUT', body: 'Hello World' })
+    ])
+
+    t.ok(data.value, 'Got eventsource data after writing')
+    t.ok(data.value.includes('event:change'), 'Eventsource data represents a change event')
+    t.ok(data.value.endsWith('\n\n'), 'Ends with two newlines')
+
+    await reader.cancel()
+  })
 }
