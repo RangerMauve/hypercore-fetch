@@ -167,11 +167,15 @@ async function runTests () {
 
     const reader = await response.body.getReader()
 
-    await Promise.all([
+    const [data] = await Promise.all([
       reader.read(),
       fetch('hyper://example/example4.txt', { method: 'PUT', body: 'Hello World' })
     ])
 
-    t.pass('Got an event after writing')
+    t.ok(data.value, 'Got eventsource data after writing')
+    t.ok(data.value.includes('event:change'), 'Eventsource data represents a change event')
+    t.ok(data.value.endsWith('\n\n'), 'Ends with two newlines')
+
+    await reader.cancel()
   })
 }
