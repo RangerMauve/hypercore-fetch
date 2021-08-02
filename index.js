@@ -6,6 +6,7 @@ const parseRange = require('range-parser')
 const makeDir = require('make-dir')
 const { Readable } = require('streamx')
 const makeFetch = require('make-fetch')
+const { EventIterator } = require('event-iterator')
 
 const DEFAULT_TIMEOUT = 5000
 
@@ -45,10 +46,10 @@ module.exports = function makeHyperFetch (opts = {}) {
   return fetch
 
   async function hyperFetch ({ url, headers: rawHeaders, method, signal, body }) {
-    const isDatURL = url.startsWith('hyper://')
+    const isHyperURL = url.startsWith('hyper://')
     const urlHasProtocol = url.match(PROTOCOL_REGEX)
 
-    const shouldIntercept = isDatURL || (!urlHasProtocol && isSourceDat)
+    const shouldIntercept = isHyperURL || (!urlHasProtocol && isSourceDat)
 
     if (!shouldIntercept) throw new Error('Invalid protocol, must be hyper://')
 
@@ -287,43 +288,62 @@ module.exports = function makeHyperFetch (opts = {}) {
         }
       } else if ((method === 'GET') || (method === 'HEAD')) {
         if (method === 'GET' && headers.get('Accept') === 'text/event-stream') {
-          async function * startReader () {
-            let _resolve = null
-            let _reject = null
-            let lastPromise = null
-
-            updatePromise()
-
+          const contentFeed = await archive.getContent()
+          const events = new EventIterator(({ push, fail }) => {
             const watcher = archive.watch(path, () => {
-              _resolve(archive.version)
-              updatePromise()
+              const event = 'change'
+              const data = archive.version
+              push({ event, data })
             })
-
-            watcher.on('error', (e) => _reject(e))
-
-            try {
-              while (true) {
-                const version = await lastPromise
-                yield `id:${version}
-event:change
-data:${JSON.stringify(version)}
-
-`
-              }
-            } finally {
-              // TODO: We might have a memory leak here
-              // Might not be invoked if no `yield` happens
-              watcher.destroy()
+            watcher.on('error', fail)
+            function onDownloadMetadata (index) {
+              const event = 'download'
+              const source = archive.metadata.key.toString('hex')
+              const data = { index, source }
+              push({ event, data })
+            }
+            function onUploadMetadata (index) {
+              const event = 'download'
+              const source = archive.metadata.key.toString('hex')
+              const data = { index, source }
+              push({ event, data })
             }
 
-            function updatePromise () {
-              lastPromise = new Promise((resolve, reject) => {
-                _resolve = resolve
-                _reject = reject
-              })
+            function onDownloadContent (index) {
+              const event = 'download'
+              const source = contentFeed.key.toString('hex')
+              const data = { index, source }
+              push({ event, data })
+            }
+            function onUploadContent (index) {
+              const event = 'download'
+              const source = contentFeed.key.toString('hex')
+              const data = { index, source }
+              push({ event, data })
+            }
+
+            // TODO: Filter out indexes that don't belong to files?
+
+            archive.metadata.on('download', onDownloadMetadata)
+            archive.metadata.on('upload', onUploadMetadata)
+            contentFeed.on('download', onDownloadContent)
+            contentFeed.on('upload', onUploadMetadata)
+            return () => {
+              watcher.destroy()
+              archive.metadata.removeListener('download', onDownloadMetadata)
+              archive.metadata.removeListener('upload', onUploadMetadata)
+              contentFeed.removeListener('download', onDownloadContent)
+              contentFeed.removeListener('upload', onUploadContent)
+            }
+          })
+          async function * startReader () {
+            for await (const { event, data } of events) {
+              yield `event:${event}\ndata:${JSON.stringify(data)}\n\n`
             }
           }
+
           responseHeaders['Content-Type'] = 'text/event-stream'
+
           return {
             statusCode: 200,
             headers: responseHeaders,

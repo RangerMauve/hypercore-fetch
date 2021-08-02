@@ -116,6 +116,10 @@ This stream of data can be used with the `EventSource` in browsers.
 
 Currently there's no way to watch for changes to specific files, so that should be handled at the application level.
 
+You can also watch for the `download` and `upload` events which will be emitted whenever you download or upload blocks from the hyperdrive.
+
+The `data` for the event will contain a JSON encoded object with the `index` of the block, and the `source` which is the public key of the hypercore (either the metadata of the hyperdrive, or the content feed).
+
 ### `fetch('hyper://NAME/example.txt', {method: 'PUT', body: 'Hello World'})`
 
 You can add files to archives using a `PUT` method along with a `body`.
