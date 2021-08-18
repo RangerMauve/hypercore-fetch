@@ -158,7 +158,7 @@ This does not delete data, it only deletes the cached data from disk.
 
 You can use `/` for the path to clear all data for the archive.
 
-### `fetch('hyper://NAME/$/tags/tagName', {method: 'PUT'})`
+### `fetch('hyper://NAME/$/tags/TAG_NAME', {method: 'PUT'})`
 
 You can add a tag a version of the archive with a human readable name (like SPAGHETTI), in the example represented as `tagName` by doing a PUT into the special `/$/tags/` folder.
 
@@ -186,8 +186,41 @@ e.g.
 }
 ```
 
-### `fetch('hyper://NAME/$/tags/tagName', {method: 'DELETE'})`
+### `fetch('hyper://NAME/$/tags/TAG_NAME', {method: 'DELETE'})`
 
 You can delete a given tag with the `DELETE` method on a name within the special `$/tags/` folder.
 
 Specify the tag you want in the URL, and it'll be removed from the tags list.
+
+### `fetch('hyper://NAME/$/extensions/')`
+
+You can list the current [hypercore extensions](https://github.com/hypercore-protocol/hypercore#ext--feedregisterextensionname-handlers) that are enabled by doing a `GET` on the `/$/extensions/` directory.
+
+This will give you a directory listing with the names of all the extensions.
+
+### `fetch('hyper://NAME/$/extensions/EXTENSION_NAME')`
+
+You can list the peers that you are replication with which have registered this extension by doing a `GET` to the directory for the extension.
+
+This is also how you can register an extension that hasn't been registered yet.
+
+The list will be a JSON array with objects that contain the fields `remotePublicKey`, `remoteAddress`, `remoteType`, and `stats`
+
+### `fetch('hyper://NAME/$/extensions/', {headers: {'Accept': 'text/event-stream'}})`
+
+Using the `text/event-stream` content type in the `Accept` header will get back an event stream with the extension events.
+
+The `event` will be the name of the extension you got the data for, the `id` (accessible by `e.lastEventId` in EventSource) will be set to the ID of the peer that sent it.
+
+### `fetch('hyper://NAME/$/extensions/EXTENSION_NAME', {method: 'POST', body: 'Example'})`
+
+You can broadcast an extension message to all peers that are replicating that extension type with a `POST` to the extension's URL.
+
+The `body` of the request will be used as the payload. Please note that only utf8 encoded text is currently supported due to limitations of the event-stream encoding.
+
+### `fetch('hyper://NAME/$/extensions/EXTENSION_NAME/REMOTE_PUBLIC_KEY', {method: 'POST', body: 'Example'})`
+
+You can send an extension message to a specific peer by doing a `POST` to the extension with their remote public key ID.
+
+The `body` of the request will be used as the payload. Please note that only utf8 encoded text is currently supported due to limitations of the event-stream encoding.
+

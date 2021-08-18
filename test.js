@@ -10,12 +10,24 @@ async function runTests () {
     persist: false
   })
 
+  const { Hyperdrive: Hyperdrive2, close: close2 } = await SDK({
+    persist: false
+  })
+
   const fetch = require('./')({
     Hyperdrive,
     writable: true
   })
 
-  test.onFinish(close)
+  const fetch2 = require('./')({
+    Hyperdrive: Hyperdrive2,
+    writable: true
+  })
+
+  test.onFinish(() => {
+    close()
+    close2()
+  })
 
   test('Read index.html', async (t) => {
     const archive = Hyperdrive('example1')
@@ -178,4 +190,72 @@ async function runTests () {
 
     await reader.cancel()
   })
+
+  test('Send extension from one peer to another', async (t) => {
+    const domainResponse = await fetch('hyper://example/.well-known/hyper')
+    const domain = (await domainResponse.text()).split('\n')[0]
+
+    const extensionURL = `${domain}/$/extensions/example`
+    const extensionListURL = `${domain}/$/extensions/`
+
+    // Load up extension message on peer 1
+    await fetch(extensionURL)
+    // Load up extension message on peer 2
+    await fetch2(extensionURL)
+
+    t.pass('Able to initialize extensions')
+
+    const extensionListRequest = await fetch(extensionListURL)
+    const extensionList = await extensionListRequest.json()
+
+    // Extension list will always be alphabetically sorted
+    t.deepEqual(extensionList, ['example', 'hypertrie'], 'Got expected list of extensions')
+
+    // Wait a bit for them to connect
+    // TODO: Peers API
+    await delay(2000)
+
+    const peerResponse1 = await fetch(extensionURL)
+    const peerList1 = await peerResponse1.json()
+
+    t.equal(peerList1.length, 1, 'Got one peer for extension message on peer1')
+
+    const peerResponse2 = await fetch2(extensionURL)
+    const peerList2 = await peerResponse2.json()
+
+    t.equal(peerList2.length, 1, 'Got one peer for extension message on peer2')
+
+    const eventRequest = await fetch(extensionListURL, {
+      headers: {
+        Accept: 'text/event-stream'
+      }
+    })
+
+    t.ok(eventRequest.ok, 'Able to open request')
+    t.equal(eventRequest.headers.get('Content-Type'), 'text/event-stream', 'Response is event stream')
+
+    const reader = await eventRequest.body.getReader()
+
+    const toRead = reader.read()
+
+    await delay(500)
+
+    const broadcastRequest = await fetch2(extensionURL, { method: 'POST', body: 'Hello World' })
+
+    t.ok(broadcastRequest.ok, 'Able to broadcast to peers')
+
+    const data = await toRead
+
+    t.ok(data.value, 'Got eventsource data after writing')
+    t.ok(data.value.includes('event:example\n'), 'EventSource data represents an example event')
+    t.ok(data.value.includes('value:Hello World\n'), 'EventSource data contains expected body')
+    t.ok(data.value.includes('id:'), 'EventSource data contains an ID')
+    t.ok(data.value.endsWith('\n\n'), 'Ends with two newlines')
+
+    await reader.cancel()
+  })
+}
+
+function delay (time) {
+  return new Promise((resolve) => setTimeout(resolve, time))
 }
