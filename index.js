@@ -15,11 +15,15 @@ const PROTOCOL_REGEX = /^\w+:\/\//
 const NOT_WRITABLE_ERROR = 'Archive not writable'
 
 const READABLE_ALLOW = ['GET', 'HEAD']
-const WRITABLE_ALLOW = ['PUT', 'DELETE']
+const WRITABLE_ALLOW = ['PUT', 'POST', 'DELETE']
 const ALL_ALLOW = READABLE_ALLOW.concat(WRITABLE_ALLOW)
 
 const SPECIAL_FOLDER = '/$/'
-const TAGS_FOLDER = `${SPECIAL_FOLDER}tags/`
+const TAGS_FOLDER_NAME = 'tags/'
+const TAGS_FOLDER = SPECIAL_FOLDER + TAGS_FOLDER_NAME
+const EXTENSIONS_FOLDER_NAME = 'extensions/'
+const EXTENSIONS_FOLDER = SPECIAL_FOLDER + EXTENSIONS_FOLDER_NAME
+const EXTENSION_EVENT = 'extension-message'
 
 // TODO: Add caching support
 const { resolveURL: DEFAULT_RESOLVE_URL } = require('hyper-dns')
@@ -42,6 +46,40 @@ module.exports = function makeHyperFetch (opts = {}) {
   const fetch = makeFetch(hyperFetch)
 
   fetch.close = () => onClose()
+
+  function getExtension (archive, name) {
+    const existing = archive.metadata.extensions.get(name)
+    if (existing) return existing
+
+    const extension = archive.registerExtension(name, {
+      encoding: 'utf8',
+      onmessage: (content, peer) => {
+        archive.emit(EXTENSION_EVENT, name, content, peer)
+      }
+    })
+
+    return extension
+  }
+
+  function getExtensionPeers (archive, name) {
+    // List peers with this extension
+    const allPeers = archive.peers
+    return allPeers.filter((peer) => {
+      const { remoteExtensions } = peer
+      const { names } = remoteExtensions
+
+      return names.includes(name)
+    })
+  }
+
+  function listExtensionNames (archive) {
+    return archive.metadata.extensions.names()
+  }
+
+  async function loadArchive (key) {
+    const Hyperdrive = await getHyperdrive()
+    return Hyperdrive(key)
+  }
 
   return fetch
 
@@ -73,9 +111,7 @@ module.exports = function makeHyperFetch (opts = {}) {
         if (key.includes('.')) throw e
       }
 
-      const Hyperdrive = await getHyperdrive()
-
-      let archive = await Hyperdrive(key)
+      let archive = await loadArchive(key)
 
       if (!archive) {
         return {
@@ -124,19 +160,11 @@ module.exports = function makeHyperFetch (opts = {}) {
       if (path.startsWith(SPECIAL_FOLDER)) {
         if (path === SPECIAL_FOLDER) {
           const files = [
-          // TODO: Add more special folders here
-            'tags/'
+            TAGS_FOLDER_NAME,
+            EXTENSIONS_FOLDER_NAME
           ]
-          let data = null
-          if (headers.get('Accept') && headers.get('Accept').includes('text/html')) {
-            const page = renderDirectory(url, path, files)
-            responseHeaders['Content-Type'] = 'text/html; charset=utf-8'
-            data = intoAsyncIterable(page)
-          } else {
-            const json = JSON.stringify(files, null, '\t')
-            responseHeaders['Content-Type'] = 'application/json; charset=utf-8'
-            data = intoAsyncIterable(json)
-          }
+
+          const data = renderFiles(headers, responseHeaders, url, path, files)
           if (method === 'HEAD') {
             return {
               statusCode: 204,
@@ -153,6 +181,7 @@ module.exports = function makeHyperFetch (opts = {}) {
         } else if (path.startsWith(TAGS_FOLDER)) {
           if (method === 'GET') {
             if (path === TAGS_FOLDER) {
+              responseHeaders['x-is-directory'] = 'true'
               const tags = await archive.getAllTags()
               const tagsObject = Object.fromEntries(tags)
               const json = JSON.stringify(tagsObject, null, '\t')
@@ -218,6 +247,103 @@ module.exports = function makeHyperFetch (opts = {}) {
               statusCode: 405,
               headers: responseHeaders,
               data: intoAsyncIterable('Method Not Allowed')
+            }
+          }
+        } else if (path.startsWith(EXTENSIONS_FOLDER)) {
+          if (path === EXTENSIONS_FOLDER) {
+            if (method === 'GET') {
+              const accept = headers.get('Accept') || ''
+              if (!accept.includes('text/event-stream')) {
+                responseHeaders['x-is-directory'] = 'true'
+
+                const extensions = listExtensionNames(archive)
+                const data = renderFiles(headers, responseHeaders, url, path, extensions)
+
+                return {
+                  statusCode: 204,
+                  headers: responseHeaders,
+                  data
+                }
+              }
+
+              const events = new EventIterator(({ push }) => {
+                function onMessage (name, content, peer) {
+                  const id = peer.remotePublicKey.toString('hex')
+                  // TODO: Fancy verification on the `name`?
+                  push(`event:${name}\nid:${id}\ndata:${JSON.stringify(content)}\n\n`)
+                }
+                archive.on(EXTENSION_EVENT, onMessage)
+                return () => {
+                  archive.removeListener('extension-message', onMessage)
+                }
+              })
+
+              responseHeaders['Content-Type'] = 'text/event-stream'
+
+              return {
+                statusCode: 200,
+                headers: responseHeaders,
+                data: events
+              }
+            } else {
+              return {
+                statusCode: 405,
+                headers: responseHeaders,
+                data: intoAsyncIterable('Method Not Allowed')
+              }
+            }
+          } else {
+            let extensionName = path.slice(EXTENSIONS_FOLDER.length)
+            let extensionPeer = null
+            if (extensionName.includes('/')) {
+              const split = extensionName.split('/')
+              extensionName = split[0]
+              if (split[1]) extensionPeer = split[1]
+            }
+            if (method === 'POST') {
+              const extension = getExtension(archive, extensionName)
+              if (extensionPeer) {
+                const peers = getExtensionPeers(archive, extensionName)
+                const peer = peers.find(({ remotePublicKey }) => remotePublicKey.toString('hex') === extensionPeer)
+                if (!peer) {
+                  return {
+                    statusCode: 404,
+                    headers: responseHeaders,
+                    data: intoAsyncIterable('Peer Not Found')
+                  }
+                }
+                extension.send(await collect(body), peer)
+              } else {
+                extension.broadcast(await collect(body))
+              }
+              return {
+                statusCode: 200,
+                headers: responseHeaders,
+                data: intoAsyncIterable('')
+              }
+            } else if (method === 'GET') {
+              const accept = headers.get('Accept') || ''
+              if (!accept.includes('text/event-stream')) {
+                // Load up the extension into memory
+                getExtension(archive, extensionName)
+
+                const extensionPeers = getExtensionPeers(archive, extensionName)
+                const finalPeers = formatPeers(extensionPeers)
+
+                const json = JSON.stringify(finalPeers, null, '\t')
+
+                return {
+                  statusCode: 200,
+                  header: responseHeaders,
+                  data: intoAsyncIterable(json)
+                }
+              }
+            } else {
+              return {
+                statusCode: 405,
+                headers: responseHeaders,
+                data: intoAsyncIterable('Method Not Allowed')
+              }
             }
           }
         } else {
@@ -409,15 +535,10 @@ module.exports = function makeHyperFetch (opts = {}) {
           const stats = await archive.readdir(finalPath, { includeStats: true })
           const files = stats.map(({ stat, name }) => (stat.isDirectory() ? `${name}/` : name))
 
-          if (headers.get('Accept') && headers.get('Accept').includes('text/html')) {
-            const page = renderDirectory(url, path, files)
-            responseHeaders['Content-Type'] = 'text/html; charset=utf-8'
-            data = intoAsyncIterable(page)
-          } else {
-            const json = JSON.stringify(files, null, '\t')
-            responseHeaders['Content-Type'] = 'application/json; charset=utf-8'
-            data = intoAsyncIterable(json)
-          }
+          // Add special directory
+          if (finalPath === '/') files.unshift('$/')
+
+          data = renderFiles(headers, responseHeaders, url, path, files)
         } else {
           responseHeaders['Accept-Ranges'] = 'bytes'
 
@@ -552,10 +673,43 @@ function renderDirectory (url, path, files) {
 `
 }
 
+function renderFiles (headers, responseHeaders, url, path, files) {
+  if (headers.get('Accept') && headers.get('Accept').includes('text/html')) {
+    const page = renderDirectory(url, path, files)
+    responseHeaders['Content-Type'] = 'text/html; charset=utf-8'
+    return intoAsyncIterable(page)
+  } else {
+    const json = JSON.stringify(files, null, '\t')
+    responseHeaders['Content-Type'] = 'application/json; charset=utf-8'
+    return intoAsyncIterable(json)
+  }
+}
+
 function once (ee, name) {
   return new Promise((resolve, reject) => {
     const isError = name === 'error'
     const cb = isError ? reject : resolve
     ee.once(name, cb)
+  })
+}
+
+async function collect (source) {
+  let buffer = ''
+
+  for await (const chunk of source) {
+    buffer += chunk
+  }
+
+  return buffer
+}
+
+function formatPeers (peers) {
+  return peers.map(({ remotePublicKey, remoteAddress, remoteType, stats }) => {
+    return {
+      remotePublicKey: remotePublicKey.toString('hex'),
+      remoteType,
+      remoteAddress,
+      stats
+    }
   })
 }
