@@ -248,7 +248,7 @@ async function runTests () {
 
     t.ok(data.value, 'Got eventsource data after writing')
     t.ok(data.value.includes('event:example\n'), 'EventSource data represents an example event')
-    t.ok(data.value.includes('value:Hello World\n'), 'EventSource data contains expected body')
+    t.ok(data.value.includes('data:Hello World\n'), 'EventSource data contains expected body')
     t.ok(data.value.includes('id:'), 'EventSource data contains an ID')
     t.ok(data.value.endsWith('\n\n'), 'Ends with two newlines')
 

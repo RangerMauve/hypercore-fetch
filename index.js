@@ -270,7 +270,9 @@ module.exports = function makeHyperFetch (opts = {}) {
                 function onMessage (name, content, peer) {
                   const id = peer.remotePublicKey.toString('hex')
                   // TODO: Fancy verification on the `name`?
-                  push(`event:${name}\nid:${id}\ndata:${JSON.stringify(content)}\n\n`)
+                  // Send each line of content separately on a `data` line
+                  const data = content.split('\n').map((line) => `data:${line}\n`).join('')
+                  push(`event:${name}\nid:${id}\n${data}\n`)
                 }
                 archive.on(EXTENSION_EVENT, onMessage)
                 return () => {
