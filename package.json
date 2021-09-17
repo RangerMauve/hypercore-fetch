@@ -26,7 +26,7 @@
   "dependencies": {
     "event-iterator": "^2.0.0",
     "fetch-headers": "^2.0.0",
-    "hyper-dns": "^0.11.4",
+    "hyper-dns": "^0.12.0",
     "hyper-sdk": "^3.0.8",
     "make-dir": "^3.1.0",
     "make-fetch": "^2.2.1",
