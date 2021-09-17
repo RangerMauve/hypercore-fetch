@@ -66,7 +66,12 @@ module.exports = function makeHyperFetch (opts = {}) {
     const allPeers = archive.peers
     return allPeers.filter((peer) => {
       const { remoteExtensions } = peer
+
+      if (!remoteExtensions) return false
+
       const { names } = remoteExtensions
+
+      if (!names) return false
 
       return names.includes(name)
     })
@@ -272,7 +277,7 @@ module.exports = function makeHyperFetch (opts = {}) {
                   // TODO: Fancy verification on the `name`?
                   // Send each line of content separately on a `data` line
                   const data = content.split('\n').map((line) => `data:${line}\n`).join('')
-                  push(`event:${name}\nid:${id}\n${data}\n`)
+                  push(`id:${id}\nevent:${name}\n${data}\n`)
                 }
                 archive.on(EXTENSION_EVENT, onMessage)
                 return () => {
