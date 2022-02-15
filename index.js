@@ -24,6 +24,8 @@ const TAGS_FOLDER = SPECIAL_FOLDER + TAGS_FOLDER_NAME
 const EXTENSIONS_FOLDER_NAME = 'extensions/'
 const EXTENSIONS_FOLDER = SPECIAL_FOLDER + EXTENSIONS_FOLDER_NAME
 const EXTENSION_EVENT = 'extension-message'
+const PEER_OPEN = 'peer-open'
+const PEER_REMOVE = 'peer-remove'
 
 // TODO: Add caching support
 const { resolveURL: DEFAULT_RESOLVE_URL } = require('hyper-dns')
@@ -279,9 +281,23 @@ module.exports = function makeHyperFetch (opts = {}) {
                   const data = content.split('\n').map((line) => `data:${line}\n`).join('')
                   push(`id:${id}\nevent:${name}\n${data}\n`)
                 }
+                function onPeerOpen (peer) {
+                  const id = peer.remotePublicKey.toString('hex')
+                  push(`id:${id}\nevent:${PEER_OPEN}\n\n`)
+                }
+                function onPeerRemove (peer) {
+                  // Whatever, probably an uninitialized peer
+                  if (!peer.remotePublicKey) return
+                  const id = peer.remotePublicKey.toString('hex')
+                  push(`id:${id}\nevent:${PEER_REMOVE}\n\n`)
+                }
                 archive.on(EXTENSION_EVENT, onMessage)
+                archive.on(PEER_OPEN, onPeerOpen)
+                archive.on(PEER_REMOVE, onPeerRemove)
                 return () => {
-                  archive.removeListener('extension-message', onMessage)
+                  archive.removeListener(EXTENSION_EVENT, onMessage)
+                  archive.removeListener(PEER_OPEN, onPeerOpen)
+                  archive.removeListener(PEER_REMOVE, onPeerRemove)
                 }
               })
 

@@ -212,6 +212,10 @@ Using the `text/event-stream` content type in the `Accept` header will get back 
 
 The `event` will be the name of the extension you got the data for, the `id` (accessible by `e.lastEventId` in EventSource) will be set to the ID of the peer that sent it.
 
+Only extension messages that have been queried before via a `GET` to the EXTENSION_NAME will be visible in this stream.
+
+There are also two special events: `peer-open` which gets emitted whena new peer has connected, and `peer-remove` which gets emitted when an existing peer disconnects.
+
 ### `fetch('hyper://NAME/$/extensions/EXTENSION_NAME', {method: 'POST', body: 'Example'})`
 
 You can broadcast an extension message to all peers that are replicating that extension type with a `POST` to the extension's URL.
