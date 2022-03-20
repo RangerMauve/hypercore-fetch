@@ -241,7 +241,7 @@ module.exports = function makeHyperFetch (opts = {}) {
             return {
               statusCode: 200,
               headers: responseHeaders,
-              data: intoAsyncIterable(`${tagVersion}`)
+              data: intoAsyncIterable(canonical)
             }
           } else if (method === 'HEAD') {
             return {
@@ -405,7 +405,7 @@ module.exports = function makeHyperFetch (opts = {}) {
         return {
           statusCode: 200,
           headers: responseHeaders,
-          data: intoAsyncIterable('')
+          data: intoAsyncIterable(canonical)
         }
       } else if (method === 'DELETE') {
         if (headers.get('x-clear') === 'cache') {
