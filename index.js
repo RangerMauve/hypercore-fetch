@@ -241,7 +241,7 @@ module.exports = function makeHyperFetch (opts = {}) {
             return {
               statusCode: 200,
               headers: responseHeaders,
-              data: intoAsyncIterable(canonical)
+              data: intoAsyncIterable(`${tagVersion}`)
             }
           } else if (method === 'HEAD') {
             return {
