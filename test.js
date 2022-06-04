@@ -1,5 +1,6 @@
 const SDK = require('hyper-sdk')
 const test = require('tape')
+const FormData = require('form-data')
 
 runTests()
 
@@ -84,10 +85,30 @@ async function runTests () {
     t.equal(await response2.text(), SAMPLE_CONTENT, 'Read back written data')
   })
 
-  test('PUT directory', async (t) => {
-    const response1 = await fetch('hyper://example/foo/bar/', { method: 'PUT' })
+  test.only('PUT FormData to directory', async (t) => {
+    const form = new FormData()
 
-    t.equal(response1.status, 200, 'Got OK response on directory creation')
+    form.append('file', SAMPLE_CONTENT, {
+      filename: 'example.txt'
+    })
+    const body = form.getBuffer()
+    const headers = form.getHeaders()
+
+    const response1 = await fetch('hyper://example/foo/bar/', {
+      method: 'PUT',
+      headers,
+      body
+    })
+
+    t.equal(response1.status, 200, 'Got OK response on directory upload')
+
+    console.log(await response1.text())
+
+    const response2 = await fetch('hyper://example/foo/bar/example.txt')
+
+    t.equal(response2.status, 200, 'Got OK response on read')
+
+    t.equal(await response2.text(), SAMPLE_CONTENT, 'Read back written data')
   })
 
   test('PUT file in new directory', async (t) => {

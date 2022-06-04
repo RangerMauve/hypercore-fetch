@@ -130,6 +130,15 @@ The `body` can be either a `String`, an `ArrayBuffer`, a `Blob`, a WHATWG `Reada
 
 Your `NAME` will likely be a `name` in most cases to ensure you have a writeable archive.
 
+### `fetch('hyper://NAME/folder/', {method: 'PUT', body: new FormData()})`
+
+You can add multiple files to a folder using the `PUT` method with a [FormData](https://developer.mozilla.org/en-US/docs/Web/API/FormData) body.
+
+You can [append](https://developer.mozilla.org/en-US/docs/Web/API/FormData) to a FormData with `formData.append(fieldname, content, 'filename.txt')` where `fieldname` gets ignored (use something like `file`?) the `content` can either be a String, Blob, or some sort of stream.
+The `filename` will be the filename within the directory that gets created.
+
+`NAME` can either be the 64 character hex key for an archive, a domain to parse with [dat-dns](https://www.npmjs.com/package/dat-dns), or a name for an archive which allows you to write to it.
+
 ### `fetch('hyper://NAME/example.txt', {method: 'DELETE'})`
 
 You can delete a file in an archive by using the `DELETE` method.

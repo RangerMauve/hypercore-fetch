@@ -7,6 +7,8 @@ const makeDir = require('make-dir')
 const { Readable } = require('streamx')
 const makeFetch = require('make-fetch')
 const { EventIterator } = require('event-iterator')
+const Busboy = require('busboy')
+const posixPath = require('path').posix
 
 const DEFAULT_TIMEOUT = 5000
 
@@ -380,9 +382,56 @@ module.exports = function makeHyperFetch (opts = {}) {
 
       if (method === 'PUT') {
         checkWritable(archive)
+        const contentType = headers.get('Content-Type') || headers.get('content-type')
+        const isFormData = contentType && contentType.includes('multipart/form-data')
+
         if (path.endsWith('/')) {
           await makeDir(path, { fs: archive })
+          const busboy = new Busboy({ headers: rawHeaders })
+
+          const toUpload = new EventIterator(({ push, stop, fail }) => {
+            busboy.once('error', fail)
+            busboy.once('finish', stop)
+
+            busboy.on('file', async (fieldName, fileData, fileName) => {
+              const finalPath = posixPath.join(path, fileName)
+
+              const source = Readable.from(fileData)
+              const destination = archive.createWriteStream(finalPath)
+
+              source.pipe(destination)
+              try {
+                Promise.race([
+                  once(source, 'error').then((e) => { throw e }),
+                  once(destination, 'error').then((e) => { throw e }),
+                  once(source, 'end')
+                ])
+              } catch (e) {
+                fail(e)
+              }
+            })
+
+            // TODO: Does busboy need to be GC'd?
+            return () => {}
+          })
+
+          Readable.from(body).pipe(busboy)
+
+          await Promise.all(await collect(toUpload))
+
+          return {
+            statusCode: 200,
+            headers: responseHeaders,
+            data: intoAsyncIterable(canonical)
+          }
         } else {
+          if (isFormData) {
+            return {
+              statusCode: 400,
+              headers: responseHeaders,
+              data: intoAsyncIterable('FormData only supported for folders (ending with a /)')
+            }
+          }
           const parentDir = path.split('/').slice(0, -1).join('/')
           if (parentDir) {
             await makeDir(parentDir, { fs: archive })
