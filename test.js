@@ -85,7 +85,7 @@ async function runTests () {
     t.equal(await response2.text(), SAMPLE_CONTENT, 'Read back written data')
   })
 
-  test.only('PUT FormData to directory', async (t) => {
+  test('PUT FormData to directory', async (t) => {
     const form = new FormData()
 
     form.append('file', SAMPLE_CONTENT, {
