@@ -31,7 +31,7 @@
     "hyper-dns": "^0.12.0",
     "hyper-sdk": "^3.0.9",
     "make-dir": "^3.1.0",
-    "make-fetch": "^2.2.1",
+    "make-fetch": "^2.3.3",
     "mime": "^2.4.4",
     "range-parser": "^1.2.1",
     "resolve-dat-path": "^2.0.0",
