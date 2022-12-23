@@ -5,7 +5,7 @@
   "bin": {
     "hypercore-fetch": "bin.js"
   },
-  "main": "index.js",
+  "type": "module",
   "scripts": {
     "test": "node test",
     "lint": "standard --fix"
@@ -25,22 +25,15 @@
   },
   "homepage": "https://github.com/RangerMauve/hypercore-fetch#readme",
   "dependencies": {
-    "busboy": "^0.3.1",
     "event-iterator": "^2.0.0",
-    "fetch-headers": "^2.0.0",
-    "hyper-dns": "^0.12.0",
-    "hyper-sdk": "^3.0.9",
-    "make-dir": "^3.1.0",
-    "make-fetch": "^2.3.3",
-    "mime": "^2.4.4",
+    "hyperdrive": "^11.0.0-alpha.10",
+    "make-fetch": "^3.0.0",
+    "mime": "^3.0.0",
     "range-parser": "^1.2.1",
-    "resolve-dat-path": "^2.0.0",
-    "sodium-universal": "^3.0.2",
-    "streamx": "^2.10.0"
+    "streamx": "^2.13.0"
   },
   "devDependencies": {
-    "form-data": "^4.0.0",
-    "random-access-memory": "^3.1.1",
+    "hyper-sdk": "^4.0.2",
     "standard": "^17.0.0",
     "tape": "^5.2.2"
   }

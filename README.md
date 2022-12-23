@@ -47,10 +47,6 @@ Typically, you don't need to pass in any of these and they're there for more adv
 
 After you've created it, `fetch` will be have like it does in [browsers](https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API).
 
-### `await fetch.close()`
-
-Closes resources for the Dat SDK. This does nothing if you specified the Hyperdrive and `resolveName` options.
-
 ### Common Headers
 
 Each response will contain a header for the canonical URL represented as a `Link` header with `rel=canonical`.
@@ -69,12 +65,6 @@ You can find the details about how resolution works in the [resolve-dat-path](ht
 `NAME` can either be the 64 character hex key for an archive, a domain to parse with [dat-dns](https://www.npmjs.com/package/dat-dns), or a name for an archive which allows you to write to it.
 
 The response headers will contain `X-Blocks` for the number of blocks of data this file represents on disk, and `X-Blocks-Downloaded` which is the number of blocks from this file that have been downloaded locally.
-
-### `fetch('hyper://NAME/.well-known/dat', {method: 'GET'})`
-
-This is used by the dat-dns module for resoving dns domains to `dat://` URLs.
-
-This will return some text which will have a `dat://` URL of your archive, followed by a newline and a TTL for the DNS record.
 
 ### `fetch('hyper://NAME/example/', {method: 'GET'})`
 
@@ -147,60 +137,6 @@ You cannot delete directories if they are not empty.
 
 `NAME` can either be the 64 character hex key for an archive, a domain to parse with [dat-dns](https://www.npmjs.com/package/dat-dns), or a name for an archive which allows you to write to it.
 
-### `fetch('hyper://NAME/example.txt', {method: 'GET', headers: {'x-download': 'cache'}})`
-
-You can download a file or an entire folder to the local cache using the `x-download` header set to `cache` in a `GET` request.
-
-`NAME` can either be the 64 character hex key for an archive, a domain to parse with [dat-dns](https://www.npmjs.com/package/dat-dns), or a name for an archive which allows you to write to it.
-
-You can use `/` for the path to download the entire contents
-
-### `fetch('hyper://NAME/example.txt', {method: 'DELETE', headers: {'x-clear': 'cache'}})`
-
-You can clear the data stored in the local cache for a file or folder using the `x-clear` header set to `cache` in a `DELETE` request..
-
-This is like the opposite of using `x-download` to download data.
-
-This does not delete data, it only deletes the cached data from disk.
-
-`NAME` can either be the 64 character hex key for an archive, a domain to parse with [dat-dns](https://www.npmjs.com/package/dat-dns), or a name for an archive which allows you to write to it.
-
-You can use `/` for the path to clear all data for the archive.
-
-### `fetch('hyper://NAME/$/tags/TAG_NAME', {method: 'PUT'})`
-
-You can add a tag a version of the archive with a human readable name (like SPAGHETTI), in the example represented as `tagName` by doing a PUT into the special `/$/tags/` folder.
-
-Afterwards you can load the archive at that given version with `hyper://NAME+TAG_NAME`.
-
-E.g.
-
-`PUT hyper://123kjh213kjh123/$/tags/v4.20`
-`GET hyper://123kjh213kjh123+v4.20/example.txt`
-
-### `fetch('hyper://NAME/$/tags/', {method: 'GET'})`
-
-You can get a list of all tags by doing a `GET` on the `/$/tags/` folder.
-
-The response will be a JSON object which maps tag names to archive versions.
-
-Use `await response.json()` to get the data out.
-
-e.g.
-
-```json
-{
-  "tagOne": 1,
-  "example": 100000
-}
-```
-
-### `fetch('hyper://NAME/$/tags/TAG_NAME', {method: 'DELETE'})`
-
-You can delete a given tag with the `DELETE` method on a name within the special `$/tags/` folder.
-
-Specify the tag you want in the URL, and it'll be removed from the tags list.
-
 ### `fetch('hyper://NAME/$/extensions/')`
 
 You can list the current [hypercore extensions](https://github.com/hypercore-protocol/hypercore#ext--feedregisterextensionname-handlers) that are enabled by doing a `GET` on the `/$/extensions/` directory.
@@ -236,4 +172,3 @@ The `body` of the request will be used as the payload. Please note that only utf
 You can send an extension message to a specific peer by doing a `POST` to the extension with their remote public key ID.
 
 The `body` of the request will be used as the payload. Please note that only utf8 encoded text is currently supported due to limitations of the event-stream encoding.
-
