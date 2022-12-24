@@ -31,6 +31,15 @@ export default async function makeHyperFetch ({
     const corestore = sdk.namespace(name)
     const dbCore = corestore.get({ name: 'db' })
     await dbCore.ready()
+
+    if (!dbCore.discovery) {
+      const discovery = sdk.join(dbCore.discoveryKey)
+      dbCore.discovery = discovery
+      dbCore.once('close', () => {
+        discovery.destroy()
+      })
+    }
+
     return dbCore
   }
 
@@ -56,7 +65,7 @@ export default async function makeHyperFetch ({
     if (drives.has(key)) {
       return drives.get(key)
     }
-    const core = getDBCoreForName(key)
+    const core = await getDBCoreForName(key)
     if (!core.length && errorOnNew) {
       return { status: 400, body: 'Must create key with POST before reading' }
     }

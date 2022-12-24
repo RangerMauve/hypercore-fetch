@@ -58,6 +58,8 @@ test('Quick check', async (t) => {
 
   t.equal(content, 'Hello World!')
 
+  await delay(5000)
+
   const dirResponse = await fetch2(created)
 
   await checkResponse(dirResponse, t)
