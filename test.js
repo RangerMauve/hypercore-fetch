@@ -5,6 +5,7 @@ const FormData = require('form-data')
 runTests()
 
 const SAMPLE_CONTENT = 'Hello World'
+const SAMPLE_CONTENT2 = 'Goodbye World'
 
 async function runTests () {
   const { Hyperdrive, close } = await SDK({
@@ -274,6 +275,26 @@ async function runTests () {
     t.ok(data.value.endsWith('\n\n'), 'Ends with two newlines')
 
     await reader.cancel()
+  })
+
+  test.only('Get updated file on remote peer', async (t) => {
+    const ALIAS = 'example'
+    const FILE_LOCATION = '/foo.txt'
+
+    await fetch(`hyper://${ALIAS}${FILE_LOCATION}`, { method: 'PUT', body: SAMPLE_CONTENT })
+
+    const archive = Hyperdrive(ALIAS)
+    const url = `hyper://${archive.key.toString('hex')}${FILE_LOCATION}`
+
+    const response1 = await fetch2(url)
+
+    t.equal(await response1.text(), SAMPLE_CONTENT, 'Read file on remote')
+
+    await fetch(`hyper://${ALIAS}${FILE_LOCATION}`, { method: 'PUT', body: SAMPLE_CONTENT2 })
+
+    const response2 = await fetch2(url)
+
+    t.equal(await response2.text(), SAMPLE_CONTENT2, 'File updated on remote')
   })
 }
 
