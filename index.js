@@ -1,25 +1,47 @@
-import { makeRoutedFetch } from 'make-fetch'
+import { posix } from 'path'
+
 import { Readable, pipelinePromise } from 'streamx'
 import Hyperdrive from 'hyperdrive'
-
+import { makeRoutedFetch } from 'make-fetch'
 import mime from 'mime/lite.js'
 import parseRange from 'range-parser'
 import { EventIterator } from 'event-iterator'
 
 const DEFAULT_TIMEOUT = 5000
-const READABLE_ALLOW = ['GET', 'HEAD']
-const WRITABLE_ALLOW = ['PUT', 'POST', 'DELETE']
-const ALL_ALLOW = READABLE_ALLOW.concat(WRITABLE_ALLOW)
 
+const SPECIAL_DOMAIN = 'localhost'
 const SPECIAL_FOLDER = '$'
 const EXTENSIONS_FOLDER_NAME = 'extensions'
-const SPECIAL_DOMAIN = 'localhost'
+const EXTENSION_EVENT = 'extension-message'
+const PEER_OPEN = 'peer-open'
+const PEER_REMOVE = 'peer-remove'
+
+const MIME_TEXT_PLAIN = 'text/plain; charset=utf-8'
+const MIME_APPLICATION_JSON = 'application/json'
+const MIME_TEXT_HTML = 'text/html; charset=utf-8'
+const MIME_EVENT_STREAM = 'text/event-stream; charset=utf-8'
+
+const HEADER_CONTENT_TYPE = 'Content-Type'
+
+async function DEFAULT_RENDER_INDEX (url, files, fetch) {
+  return `
+<!DOCTYPE html>
+<title>Index of ${url.pathname}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<h1>Index of ${url.pathname}</h1>
+<ul>
+  <li><a href="../">../</a></li>
+  ${files.map((file) => `<li><a href="${file}">./${file}</a></li>`).join('\n')}
+</ul>
+`
+}
 
 export default async function makeHyperFetch ({
   sdk,
   writable = false,
   extensionMessages = writable,
-  timeout = DEFAULT_TIMEOUT
+  timeout = DEFAULT_TIMEOUT,
+  renderIndex = DEFAULT_RENDER_INDEX
 }) {
   const { fetch, router } = makeRoutedFetch()
 
@@ -38,6 +60,7 @@ export default async function makeHyperFetch ({
       dbCore.once('close', () => {
         discovery.destroy()
       })
+      await discovery.flushed()
     }
 
     return dbCore
@@ -51,7 +74,7 @@ export default async function makeHyperFetch ({
     const core = await sdk.get(hostname)
 
     const corestore = sdk.namespace(core.id)
-    const drive = new Hyperdrive(corestore)
+    const drive = new Hyperdrive(corestore, core.key)
 
     await drive.ready()
 
@@ -81,15 +104,155 @@ export default async function makeHyperFetch ({
     return drive
   }
 
+  function getExtension (core, name) {
+    const existing = core.extensions.get(name)
+    if (existing) return existing
+    console.log('Initializing extension', name, core.url)
+
+    const extension = core.registerExtension(name, {
+      encoding: 'utf8',
+      onmessage: (content, peer) => {
+        core.emit(EXTENSION_EVENT, name, content, peer)
+      }
+    })
+
+    // console.log('Got extension', extension, core.extensions)
+
+    return extension
+  }
+
+  function getExtensionPeers (core, name) {
+    // List peers with this extension
+    const allPeers = core.peers
+    return allPeers.filter((peer) => {
+      const { remoteExtensions } = peer
+
+      if (!remoteExtensions) return false
+
+      const { names } = remoteExtensions
+
+      if (!names) return false
+
+      return names.includes(name)
+    })
+  }
+
+  function listExtensionNames (core) {
+    // console.log(core.extensions, core.url)
+    return [...core.extensions.keys()]
+  }
+
   if (extensionMessages) {
-    router.get(`hyper://*/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/`, async function listExtensions () {})
-    router.get(`hyper://*/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/*`, async function listenExtension () {})
-    router.post(`hyper://*/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/*`, async function broadcastExtension () {})
-    router.post(`hyper://*/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/*/*`, async function extensionToPeer () {})
+    router.get(`hyper://*/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/`, async function listExtensions (request) {
+      const { hostname } = new URL(request.url)
+      const accept = request.headers.get('Accept') || ''
+
+      const core = await sdk.get(`hyper://${hostname}/`)
+
+      if (accept.includes('text/event-stream')) {
+        const events = new EventIterator(({ push }) => {
+          function onMessage (name, content, peer) {
+            const id = peer.remotePublicKey.toString('hex')
+            // TODO: Fancy verification on the `name`?
+            // Send each line of content separately on a `data` line
+            const data = content.split('\n').map((line) => `data:${line}\n`).join('')
+            push(`id:${id}\nevent:${name}\n${data}\n`)
+          }
+          function onPeerOpen (peer) {
+            const id = peer.remotePublicKey.toString('hex')
+            push(`id:${id}\nevent:${PEER_OPEN}\n\n`)
+          }
+          function onPeerRemove (peer) {
+            // Whatever, probably an uninitialized peer
+            if (!peer.remotePublicKey) return
+            const id = peer.remotePublicKey.toString('hex')
+            push(`id:${id}\nevent:${PEER_REMOVE}\n\n`)
+          }
+          core.on(EXTENSION_EVENT, onMessage)
+          core.on(PEER_OPEN, onPeerOpen)
+          core.on(PEER_REMOVE, onPeerRemove)
+          return () => {
+            core.removeListener(EXTENSION_EVENT, onMessage)
+            core.removeListener(PEER_OPEN, onPeerOpen)
+            core.removeListener(PEER_REMOVE, onPeerRemove)
+          }
+        })
+
+        return {
+          statusCode: 200,
+          headers: {
+            [HEADER_CONTENT_TYPE]: MIME_EVENT_STREAM
+          },
+          body: events
+        }
+      }
+
+      const extensions = listExtensionNames(core)
+      return {
+        status: 200,
+        headers: { [HEADER_CONTENT_TYPE]: MIME_APPLICATION_JSON },
+        body: JSON.stringify(extensions, null, '\t')
+      }
+    })
+    router.get(`hyper://*/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/*`, async function listenExtension (request) {
+      const { hostname, pathname } = new URL(request.url)
+      const name = pathname.slice(`/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/`.length)
+
+      const core = await sdk.get(`hyper://${hostname}/`)
+
+      await getExtension(core, name)
+
+      const peers = getExtensionPeers(core, name)
+      const finalPeers = formatPeers(peers)
+      const body = JSON.stringify(finalPeers, null, '\t')
+
+      return {
+        status: 200,
+        body,
+        headers: {
+          [HEADER_CONTENT_TYPE]: MIME_APPLICATION_JSON
+        }
+      }
+    })
+    router.post(`hyper://*/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/*`, async function broadcastExtension (request) {
+      const { hostname, pathname } = new URL(request.url)
+      const name = pathname.slice(`/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/`.length)
+
+      const core = await sdk.get(`hyper://${hostname}/`)
+
+      const extension = await getExtension(core, name)
+      const data = await request.arrayBuffer()
+      extension.broadcast(data)
+
+      return { status: 200 }
+    })
+    router.post(`hyper://*/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/*/*`, async function extensionToPeer (request) {
+      const { hostname, pathname } = new URL(request.url)
+      const subFolder = pathname.slice(`/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/`.length)
+      const [name, extensionPeer] = subFolder.split('/')
+
+      const core = await sdk.get(`hyper://${hostname}/`)
+
+      const extension = await getExtension(core, name)
+      const peers = getExtensionPeers(core, name)
+      const peer = peers.find(({ remotePublicKey }) => remotePublicKey.toString('hex') === extensionPeer)
+      if (!peer) {
+        return {
+          status: 404,
+          headers: {
+            [HEADER_CONTENT_TYPE]: MIME_TEXT_PLAIN
+          },
+          body: 'Peer Not Found'
+        }
+      }
+      const data = await request.arrayBuffer()
+      extension.send(data, peer)
+      return { status: 200 }
+    })
   }
 
   if (writable) {
-    router.get('hyper://localhost/', async function getKey (request) {
+    router.get(`hyper://${SPECIAL_DOMAIN}/`, async function getKey (request) {
       const key = new URL(request.url).searchParams.get('key')
       if (!key) {
         return { status: 400, body: 'Must specify key parameter to resolve' }
@@ -99,7 +262,7 @@ export default async function makeHyperFetch ({
 
       return { body: drive.url }
     })
-    router.post('hyper://localhost/', async function createKey (request) {
+    router.post(`hyper://${SPECIAL_DOMAIN}/`, async function createKey (request) {
       // TODO: Allow importing secret keys here
       // Maybe specify a seed to use for generating the blobs?
       // Else we'd need to specify the blobs keys and metadata keys
@@ -117,11 +280,25 @@ export default async function makeHyperFetch ({
     router.put('hyper://*/**', async function putFiles (request) {
       const { hostname, pathname } = new URL(request.url)
       const contentType = request.headers.get('Content-Type') || ''
+      const isFormData = contentType.includes('multipart/form-data')
 
       const drive = await getDrive(hostname)
 
-      if (contentType.includes('multipart/formdata')) {
+      if (isFormData) {
         // It's a form! Get the files out and process them
+        const formData = await request.formData()
+        for (const [name, data] of formData) {
+          if (name !== 'file') continue
+          const filePath = posix.join(pathname, data.name)
+          await pipelinePromise(
+            Readable.from(data.stream()),
+            drive.createWriteStream(filePath, {
+              metadata: {
+                mtime: Date.now()
+              }
+            })
+          )
+        }
       } else {
         await pipelinePromise(
           Readable.from(request.body),
@@ -137,796 +314,243 @@ export default async function makeHyperFetch ({
 
       const drive = await getDrive(hostname)
 
+      if (pathname.endsWith('/')) {
+        let didDelete = false
+        for await (const entry of drive.list(pathname)) {
+          await drive.del(entry.key)
+          didDelete = true
+        }
+        if (!didDelete) {
+          return { status: 404, body: 'Not Found', headers: { [HEADER_CONTENT_TYPE]: MIME_TEXT_PLAIN } }
+        }
+        return { status: 200 }
+      }
+
+      const entry = await drive.entry(pathname)
+
+      if (!entry) {
+        return { status: 404, body: 'Not Found', headers: { [HEADER_CONTENT_TYPE]: MIME_TEXT_PLAIN } }
+      }
       await drive.del(pathname)
 
       return { status: 200 }
     })
   }
 
-  router.get('hyper://*/**', async function getFiles (request) {
-    // TODO: Detect directories
-    // TODO: Redirect on directories without trailing slash
-    // TODO: HTML render directories
-    // TODO: Detect index.html/index.md/etc (based on Accept?)
-    // TODO: NoRedirect flag
-    // TODO: Support watching for changes
-    // TODO: Support Range header
-
-    const { hostname, pathname } = new URL(request.url)
-    const contentType = request.headers.get('Content-Type') || ''
+  router.head('hyper://*/**', async function headFiles (request) {
+    const url = new URL(request.url)
+    const { hostname, pathname, searchParams } = url
     const accept = request.headers.get('Accept') || ''
+    const isRanged = request.headers.get('Range') || ''
+    const noResolve = searchParams.has('noResolve')
+    const isDirectory = pathname.endsWith('/')
+
+    const resHeaders = {
+      'Accept-Ranges': 'bytes'
+    }
 
     const drive = await getDrive(hostname)
 
-    if (pathname.endsWith('/')) {
-      const entries = []
-      for await (const path of drive.readdir(pathname)) {
-        entries.push(path)
+    if (isDirectory) {
+      const entries = await listEntries(drive, pathname)
+
+      const hasItems = entries.length
+
+      if (!hasItems && pathname !== '/') {
+        return {
+          status: 404,
+          headers: {
+            [HEADER_CONTENT_TYPE]: MIME_TEXT_PLAIN
+          }
+        }
+      }
+
+      if (!noResolve) {
+        if (entries.includes('index.html')) {
+          return {
+            status: 204,
+            headers: {
+              ...resHeaders,
+              [HEADER_CONTENT_TYPE]: MIME_TEXT_HTML
+            }
+          }
+        }
+      }
+
+      // TODO: Add range header calculation
+      if (accept.includes('text/html')) {
+        return {
+          status: 204,
+          headers: {
+            ...resHeaders,
+            [HEADER_CONTENT_TYPE]: MIME_TEXT_HTML
+          }
+        }
+      }
+
+      return {
+        status: 204,
+        headers: {
+          ...resHeaders,
+          [HEADER_CONTENT_TYPE]: MIME_APPLICATION_JSON
+        }
+      }
+    }
+    const entry = await drive.entry(pathname)
+
+    if (!entry) {
+      return { status: 404, body: 'Not Found' }
+    }
+
+    resHeaders.ETag = `${entry.seq}`
+
+    const contentType = getMimeType(pathname)
+    resHeaders['Content-Type'] = contentType
+
+    if (entry.metadata?.mtime) {
+      const date = new Date(entry.metadata.mtime)
+      resHeaders['Last-Modified'] = date.toUTCString()
+    }
+
+    const size = entry.value.byteLength
+    if (isRanged) {
+      const ranges = parseRange(size, isRanged)
+
+      if (ranges && ranges.length && ranges.type === 'bytes') {
+        const [{ start, end }] = ranges
+        const length = (end - start + 1)
+
+        return {
+          status: 200,
+          headers: {
+            ...resHeaders,
+            'Content-Length': `${length}`,
+            'Content-Range': `bytes ${start}-${end}/${size}`
+          }
+        }
+      }
+    }
+
+    return {
+      status: 200,
+      headers: resHeaders
+    }
+  })
+
+  // TODO: Redirect on directories without trailing slash
+  router.get('hyper://*/**', async function getFiles (request) {
+    const url = new URL(request.url)
+    const { hostname, pathname, searchParams } = url
+    const accept = request.headers.get('Accept') || ''
+    const noResolve = searchParams.has('noResolve')
+    const isDirectory = pathname.endsWith('/')
+
+    const drive = await getDrive(hostname)
+
+    if (isDirectory) {
+      const entries = await listEntries(drive, pathname)
+
+      if (!entries.length && pathname !== '/') {
+        return {
+          status: 404,
+          body: '[]',
+          headers: { [HEADER_CONTENT_TYPE]: MIME_APPLICATION_JSON }
+        }
+      }
+
+      if (!noResolve) {
+        if (entries.includes('index.html')) {
+          return serveFile(request.headers, drive, posix.join(pathname, 'index.html'))
+        }
+      }
+
+      if (accept.includes('text/html')) {
+        const body = renderIndex(url, entries, fetch)
+        return {
+          status: 200,
+          body,
+          headers: { [HEADER_CONTENT_TYPE]: MIME_TEXT_HTML }
+        }
       }
 
       return {
         status: 200,
-        body: JSON.stringify(entries),
-        headers: { 'Content-Type': 'application/json' }
+        body: JSON.stringify(entries, null, '\t'),
+        headers: { [HEADER_CONTENT_TYPE]: MIME_APPLICATION_JSON }
       }
     }
     const entry = await drive.entry(pathname)
+
     if (!entry) {
       return { status: 404, body: 'Not Found' }
     }
-    return {
-      status: 200,
-      body: drive.createReadStream(pathname)
-    }
-  })
-  router.head('hyper://*/**', async function headFiles (request) {
+
+    return serveFile(request.headers, drive, pathname)
   })
 
   return fetch
 }
 
-/*
-module.exports = function makeHyperFetch (opts = {}) {
-  let {
-    Hyperdrive,
-    resolveURL = DEFAULT_RESOLVE_URL,
-    base,
-    timeout = DEFAULT_TIMEOUT,
-    writable = false
-  } = opts
+async function serveFile (headers, drive, pathname) {
+  const isRanged = headers.get('Range') || ''
+  const contentType = getMimeType(pathname)
 
-  let sdk = null
-  let gettingSDK = null
-  let onClose = async () => undefined
+  const entry = await drive.entry(pathname)
 
-  const isSourceDat = base && base.startsWith('hyper://')
-
-  const fetch = makeFetch(hyperFetch)
-
-  fetch.close = () => onClose()
-
-  function getExtension (archive, name) {
-    const existing = archive.metadata.extensions.get(name)
-    if (existing) return existing
-
-    const extension = archive.registerExtension(name, {
-      encoding: 'utf8',
-      onmessage: (content, peer) => {
-        archive.emit(EXTENSION_EVENT, name, content, peer)
-      }
-    })
-
-    return extension
+  const resHeaders = {
+    ETag: `${entry.seq}`,
+    [HEADER_CONTENT_TYPE]: contentType,
+    'Accept-Ranges': 'bytes'
   }
 
-  function getExtensionPeers (archive, name) {
-    // List peers with this extension
-    const allPeers = archive.peers
-    return allPeers.filter((peer) => {
-      const { remoteExtensions } = peer
-
-      if (!remoteExtensions) return false
-
-      const { names } = remoteExtensions
-
-      if (!names) return false
-
-      return names.includes(name)
-    })
+  if (entry.metadata?.mtime) {
+    const date = new Date(entry.metadata.mtime)
+    resHeaders['Last-Modified'] = date.toUTCString()
   }
 
-  function listExtensionNames (archive) {
-    return archive.metadata.extensions.names()
-  }
+  const size = entry.value.blob.byteLength
+  if (isRanged) {
+    const ranges = parseRange(size, isRanged)
 
-  async function loadArchive (key) {
-    const Hyperdrive = await getHyperdrive()
-    return Hyperdrive(key)
-  }
+    if (ranges && ranges.length && ranges.type === 'bytes') {
+      const [{ start, end }] = ranges
+      const length = (end - start + 1)
 
-  return fetch
-
-  async function hyperFetch ({ url, headers: rawHeaders, method, signal, body }) {
-    const isHyperURL = url.startsWith('hyper://')
-    const urlHasProtocol = url.match(PROTOCOL_REGEX)
-
-    const shouldIntercept = isHyperURL || (!urlHasProtocol && isSourceDat)
-
-    if (!shouldIntercept) throw new Error('Invalid protocol, must be hyper://')
-
-    const headers = new Headers(rawHeaders || {})
-
-    const responseHeaders = {}
-    responseHeaders['Access-Control-Allow-Origin'] = '*'
-    responseHeaders['Allow-CSP-From'] = '*'
-    responseHeaders['Access-Control-Allow-Headers'] = '*'
-
-    try {
-      let { pathname: path, key, version, searchParams } = parseDatURL(url)
-      if (!path) path = '/'
-      if (!path.startsWith('/')) path = '/' + path
-
-      try {
-        const resolvedURL = await resolveURL(`hyper://${key}`)
-        key = resolvedURL.hostname
-      } catch (e) {
-        // Probably a domain that couldn't resolve
-        if (key.includes('.')) throw e
-      }
-
-      let archive = await loadArchive(key)
-
-      if (!archive) {
-        return {
-          statusCode: 404,
-          headers: responseHeaders,
-          data: intoAsyncIterable('Unknown drive')
-        }
-      }
-
-      await archive.ready()
-
-      if (!archive.version) {
-        if (!archive.peers.length) {
-          await new Promise((resolve, reject) => {
-            setTimeout(() => reject(new Error('Timed out looking for peers')), timeout)
-            archive.once('peer-open', resolve)
-          })
-        }
-        await new Promise((resolve, reject) => {
-          archive.metadata.update({ ifAvailable: true }, (err) => {
-            if (err) reject(err)
-            else resolve()
-          })
-        })
-      }
-
-      if (version) {
-        if (NUMBER_REGEX.test(version)) {
-          archive = await archive.checkout(version)
-        } else {
-          archive = await archive.checkout(await archive.getTaggedVersion(version))
-        }
-        await archive.ready()
-      }
-
-      const canonical = `hyper://${archive.key.toString('hex')}${path || ''}`
-      responseHeaders.Link = `<${canonical}>; rel="canonical"`
-
-      const isWritable = writable && archive.writable
-      const allowHeaders = isWritable ? ALL_ALLOW : READABLE_ALLOW
-      responseHeaders.Allow = allowHeaders.join(', ')
-
-      // We can say the file hasn't changed if the drive version hasn't changed
-      responseHeaders.ETag = `"${archive.version}"`
-
-      if (path.startsWith(SPECIAL_FOLDER)) {
-        if (path === SPECIAL_FOLDER) {
-          const files = [
-            TAGS_FOLDER_NAME,
-            EXTENSIONS_FOLDER_NAME
-          ]
-
-          const data = renderFiles(headers, responseHeaders, url, path, files)
-          if (method === 'HEAD') {
-            return {
-              statusCode: 204,
-              headers: responseHeaders,
-              data: intoAsyncIterable('')
-            }
-          } else {
-            return {
-              statusCode: 200,
-              headers: responseHeaders,
-              data
-            }
-          }
-        } else if (path.startsWith(TAGS_FOLDER)) {
-          if (method === 'GET') {
-            if (path === TAGS_FOLDER) {
-              responseHeaders['x-is-directory'] = 'true'
-              const tags = await archive.getAllTags()
-              const tagsObject = Object.fromEntries(tags)
-              const json = JSON.stringify(tagsObject, null, '\t')
-
-              responseHeaders['Content-Type'] = 'application/json; charset=utf-8'
-
-              return {
-                statusCode: 200,
-                headers: responseHeaders,
-                data: intoAsyncIterable(json)
-              }
-            } else {
-              const tagName = path.slice(TAGS_FOLDER.length)
-              try {
-                const tagVersion = await archive.getTaggedVersion(tagName)
-
-                return {
-                  statusCode: 200,
-                  headers: responseHeaders,
-                  data: intoAsyncIterable(`${tagVersion}`)
-                }
-              } catch {
-                return {
-                  statusCode: 404,
-                  headers: responseHeaders,
-                  data: intoAsyncIterable('Tag Not Found')
-                }
-              }
-            }
-          } else if (method === 'DELETE') {
-            checkWritable(archive)
-            const tagName = path.slice(TAGS_FOLDER.length)
-            await archive.deleteTag(tagName || version)
-            responseHeaders.ETag = `"${archive.version}"`
-
-            return {
-              statusCode: 200,
-              headers: responseHeaders,
-              data: intoAsyncIterable('')
-            }
-          } else if (method === 'PUT') {
-            checkWritable(archive)
-            const tagName = path.slice(TAGS_FOLDER.length)
-            const tagVersion = archive.version
-
-            await archive.createTag(tagName, tagVersion)
-            responseHeaders['Content-Type'] = 'text/plain; charset=utf-8'
-            responseHeaders.ETag = `"${archive.version}"`
-
-            return {
-              statusCode: 200,
-              headers: responseHeaders,
-              data: intoAsyncIterable(`${tagVersion}`)
-            }
-          } else if (method === 'HEAD') {
-            return {
-              statusCode: 204,
-              headers: responseHeaders,
-              data: intoAsyncIterable('')
-            }
-          } else {
-            return {
-              statusCode: 405,
-              headers: responseHeaders,
-              data: intoAsyncIterable('Method Not Allowed')
-            }
-          }
-        } else if (path.startsWith(EXTENSIONS_FOLDER)) {
-          if (path === EXTENSIONS_FOLDER) {
-            if (method === 'GET') {
-              const accept = headers.get('Accept') || ''
-              if (!accept.includes('text/event-stream')) {
-                responseHeaders['x-is-directory'] = 'true'
-
-                const extensions = listExtensionNames(archive)
-                const data = renderFiles(headers, responseHeaders, url, path, extensions)
-
-                return {
-                  statusCode: 204,
-                  headers: responseHeaders,
-                  data
-                }
-              }
-
-              const events = new EventIterator(({ push }) => {
-                function onMessage (name, content, peer) {
-                  const id = peer.remotePublicKey.toString('hex')
-                  // TODO: Fancy verification on the `name`?
-                  // Send each line of content separately on a `data` line
-                  const data = content.split('\n').map((line) => `data:${line}\n`).join('')
-                  push(`id:${id}\nevent:${name}\n${data}\n`)
-                }
-                function onPeerOpen (peer) {
-                  const id = peer.remotePublicKey.toString('hex')
-                  push(`id:${id}\nevent:${PEER_OPEN}\n\n`)
-                }
-                function onPeerRemove (peer) {
-                  // Whatever, probably an uninitialized peer
-                  if (!peer.remotePublicKey) return
-                  const id = peer.remotePublicKey.toString('hex')
-                  push(`id:${id}\nevent:${PEER_REMOVE}\n\n`)
-                }
-                archive.on(EXTENSION_EVENT, onMessage)
-                archive.on(PEER_OPEN, onPeerOpen)
-                archive.on(PEER_REMOVE, onPeerRemove)
-                return () => {
-                  archive.removeListener(EXTENSION_EVENT, onMessage)
-                  archive.removeListener(PEER_OPEN, onPeerOpen)
-                  archive.removeListener(PEER_REMOVE, onPeerRemove)
-                }
-              })
-
-              responseHeaders['Content-Type'] = 'text/event-stream'
-
-              return {
-                statusCode: 200,
-                headers: responseHeaders,
-                data: events
-              }
-            } else {
-              return {
-                statusCode: 405,
-                headers: responseHeaders,
-                data: intoAsyncIterable('Method Not Allowed')
-              }
-            }
-          } else {
-            let extensionName = path.slice(EXTENSIONS_FOLDER.length)
-            let extensionPeer = null
-            if (extensionName.includes('/')) {
-              const split = extensionName.split('/')
-              extensionName = split[0]
-              if (split[1]) extensionPeer = split[1]
-            }
-            if (method === 'POST') {
-              const extension = getExtension(archive, extensionName)
-              if (extensionPeer) {
-                const peers = getExtensionPeers(archive, extensionName)
-                const peer = peers.find(({ remotePublicKey }) => remotePublicKey.toString('hex') === extensionPeer)
-                if (!peer) {
-                  return {
-                    statusCode: 404,
-                    headers: responseHeaders,
-                    data: intoAsyncIterable('Peer Not Found')
-                  }
-                }
-                extension.send(await collect(body), peer)
-              } else {
-                extension.broadcast(await collect(body))
-              }
-              return {
-                statusCode: 200,
-                headers: responseHeaders,
-                data: intoAsyncIterable('')
-              }
-            } else if (method === 'GET') {
-              const accept = headers.get('Accept') || ''
-              if (!accept.includes('text/event-stream')) {
-                // Load up the extension into memory
-                getExtension(archive, extensionName)
-
-                const extensionPeers = getExtensionPeers(archive, extensionName)
-                const finalPeers = formatPeers(extensionPeers)
-
-                const json = JSON.stringify(finalPeers, null, '\t')
-
-                return {
-                  statusCode: 200,
-                  header: responseHeaders,
-                  data: intoAsyncIterable(json)
-                }
-              }
-            } else {
-              return {
-                statusCode: 405,
-                headers: responseHeaders,
-                data: intoAsyncIterable('Method Not Allowed')
-              }
-            }
-          }
-        } else {
-          return {
-            statusCode: 404,
-            headers: responseHeaders,
-            data: intoAsyncIterable('Not Found')
-          }
-        }
-      }
-
-      if (method === 'PUT') {
-        checkWritable(archive)
-        const contentType = headers.get('Content-Type') || headers.get('content-type')
-        const isFormData = contentType && contentType.includes('multipart/form-data')
-
-        if (path.endsWith('/')) {
-          await makeDir(path, { fs: archive })
-          const busboy = new Busboy({ headers: rawHeaders })
-
-          const toUpload = new EventIterator(({ push, stop, fail }) => {
-            busboy.once('error', fail)
-            busboy.once('finish', stop)
-
-            busboy.on('file', async (fieldName, fileData, fileName) => {
-              const finalPath = posixPath.join(path, fileName)
-
-              const source = Readable.from(fileData)
-              const destination = archive.createWriteStream(finalPath)
-
-              source.pipe(destination)
-              try {
-                Promise.race([
-                  once(source, 'error').then((e) => { throw e }),
-                  once(destination, 'error').then((e) => { throw e }),
-                  once(source, 'end')
-                ])
-              } catch (e) {
-                fail(e)
-              }
-            })
-
-            // TODO: Does busboy need to be GC'd?
-            return () => {}
-          })
-
-          Readable.from(body).pipe(busboy)
-
-          await Promise.all(await collect(toUpload))
-
-          return {
-            statusCode: 200,
-            headers: responseHeaders,
-            data: intoAsyncIterable(canonical)
-          }
-        } else {
-          if (isFormData) {
-            return {
-              statusCode: 400,
-              headers: responseHeaders,
-              data: intoAsyncIterable('FormData only supported for folders (ending with a /)')
-            }
-          }
-          const parentDir = path.split('/').slice(0, -1).join('/')
-          if (parentDir) {
-            await makeDir(parentDir, { fs: archive })
-          }
-
-          const source = Readable.from(body)
-          const destination = archive.createWriteStream(path)
-          // The sink is needed because Hyperdrive's write stream is duplex
-
-          source.pipe(destination)
-
-          await Promise.race([
-            once(source, 'error'),
-            once(destination, 'error'),
-            once(source, 'end')
-          ])
-        }
-        responseHeaders.ETag = `"${archive.version}"`
-
-        return {
-          statusCode: 200,
-          headers: responseHeaders,
-          data: intoAsyncIterable(canonical)
-        }
-      } else if (method === 'DELETE') {
-        if (headers.get('x-clear') === 'cache') {
-          await archive.clear(path)
-          return {
-            statusCode: 200,
-            headers: responseHeaders,
-            data: intoAsyncIterable('')
-          }
-        } else {
-          checkWritable(archive)
-
-          const stats = await archive.stat(path)
-          // Weird stuff happening up in here...
-          const stat = Array.isArray(stats) ? stats[0] : stats
-
-          if (stat.isDirectory()) {
-            await archive.rmdir(path)
-          } else {
-            await archive.unlink(path)
-          }
-          responseHeaders.ETag = `"${archive.version}"`
-
-          return {
-            statusCode: 200,
-            headers: responseHeaders,
-            data: intoAsyncIterable('')
-          }
-        }
-      } else if ((method === 'GET') || (method === 'HEAD')) {
-        if (method === 'GET' && headers.get('Accept') === 'text/event-stream') {
-          const contentFeed = await archive.getContent()
-          const events = new EventIterator(({ push, fail }) => {
-            const watcher = archive.watch(path, () => {
-              const event = 'change'
-              const data = archive.version
-              push({ event, data })
-            })
-            watcher.on('error', fail)
-            function onDownloadMetadata (index) {
-              const event = 'download'
-              const source = archive.metadata.key.toString('hex')
-              const data = { index, source }
-              push({ event, data })
-            }
-            function onUploadMetadata (index) {
-              const event = 'download'
-              const source = archive.metadata.key.toString('hex')
-              const data = { index, source }
-              push({ event, data })
-            }
-
-            function onDownloadContent (index) {
-              const event = 'download'
-              const source = contentFeed.key.toString('hex')
-              const data = { index, source }
-              push({ event, data })
-            }
-            function onUploadContent (index) {
-              const event = 'download'
-              const source = contentFeed.key.toString('hex')
-              const data = { index, source }
-              push({ event, data })
-            }
-
-            // TODO: Filter out indexes that don't belong to files?
-
-            archive.metadata.on('download', onDownloadMetadata)
-            archive.metadata.on('upload', onUploadMetadata)
-            contentFeed.on('download', onDownloadContent)
-            contentFeed.on('upload', onUploadMetadata)
-            return () => {
-              watcher.destroy()
-              archive.metadata.removeListener('download', onDownloadMetadata)
-              archive.metadata.removeListener('upload', onUploadMetadata)
-              contentFeed.removeListener('download', onDownloadContent)
-              contentFeed.removeListener('upload', onUploadContent)
-            }
-          })
-          async function * startReader () {
-            for await (const { event, data } of events) {
-              yield `event:${event}\ndata:${JSON.stringify(data)}\n\n`
-            }
-          }
-
-          responseHeaders['Content-Type'] = 'text/event-stream'
-
-          return {
-            statusCode: 200,
-            headers: responseHeaders,
-            data: startReader()
-          }
-        }
-
-        let stat = null
-        let finalPath = path
-
-        if (headers.get('x-download') === 'cache') {
-          await archive.download(path)
-        }
-
-        // Legacy DNS spec from Dat protocol: https://github.com/datprotocol/DEPs/blob/master/proposals/0005-dns.md
-        if (finalPath === '/.well-known/dat') {
-          const { key } = archive
-          const entry = `dat://${key.toString('hex')}\nttl=3600`
-          return {
-            statusCode: 200,
-            headers: responseHeaders,
-            data: intoAsyncIterable(entry)
-          }
-        }
-
-        // New spec from hyper-dns https://github.com/martinheidegger/hyper-dns
-        if (finalPath === '/.well-known/hyper') {
-          const { key } = archive
-          const entry = `hyper://${key.toString('hex')}\nttl=3600`
-          return {
-            statusCode: 200,
-            headers: responseHeaders,
-            data: intoAsyncIterable(entry)
-          }
-        }
-        try {
-          if (searchParams.has('noResolve')) {
-            const stats = await archive.stat(path)
-            stat = stats[0]
-          } else {
-            const resolved = await resolveDatPath(archive, path)
-            finalPath = resolved.path
-            stat = resolved.stat
-          }
-        } catch (e) {
-          responseHeaders['Content-Type'] = 'text/plain; charset=utf-8'
-          return {
-            statusCode: 404,
-            headers: responseHeaders,
-            data: intoAsyncIterable(e.stack)
-          }
-        }
-
-        responseHeaders['Content-Type'] = getMimeType(finalPath)
-        responseHeaders['Last-Modified'] = stat.mtime.toUTCString()
-
-        let data = null
-        const isRanged = headers.get('Range') || headers.get('range')
-        let statusCode = 200
-
-        if (stat.isDirectory()) {
-          responseHeaders['x-is-directory'] = 'true'
-          const stats = await archive.readdir(finalPath, { includeStats: true })
-          const files = stats.map(({ stat, name }) => (stat.isDirectory() ? `${name}/` : name))
-
-          // Add special directory
-          if (finalPath === '/') files.unshift('$/')
-
-          data = renderFiles(headers, responseHeaders, url, path, files)
-        } else {
-          responseHeaders['Accept-Ranges'] = 'bytes'
-
-          try {
-            const { blocks, downloadedBlocks } = await archive.stats(finalPath)
-            responseHeaders['X-Blocks'] = `${blocks}`
-            responseHeaders['X-Blocks-Downloaded'] = `${downloadedBlocks}`
-          } catch (e) {
-            // Don't worry about it, it's optional.
-          }
-
-          const { size } = stat
-          responseHeaders['Content-Length'] = `${size}`
-
-          if (isRanged) {
-            const ranges = parseRange(size, isRanged)
-            if (ranges && ranges.length && ranges.type === 'bytes') {
-              statusCode = 206
-              const [{ start, end }] = ranges
-              const length = (end - start + 1)
-              responseHeaders['Content-Length'] = `${length}`
-              responseHeaders['Content-Range'] = `bytes ${start}-${end}/${size}`
-              if (method !== 'HEAD') {
-                data = archive.createReadStream(finalPath, {
-                  start,
-                  end
-                })
-              }
-            } else {
-              if (method !== 'HEAD') {
-                data = archive.createReadStream(finalPath)
-              }
-            }
-          } else if (method !== 'HEAD') {
-            data = archive.createReadStream(finalPath)
-          }
-        }
-
-        if (method === 'HEAD') {
-          return {
-            statusCode: 204,
-            headers: responseHeaders,
-            data: intoAsyncIterable('')
-          }
-        } else {
-          return {
-            statusCode,
-            headers: responseHeaders,
-            data
-          }
-        }
-      } else {
-        return {
-          statusCode: 405,
-          headers: responseHeaders,
-          data: intoAsyncIterable('Method Not Allowed')
-        }
-      }
-    } catch (e) {
-      const isUnauthorized = (e.message === NOT_WRITABLE_ERROR)
-      const statusCode = isUnauthorized ? 403 : 500
-      const statusText = isUnauthorized ? 'Not Authorized' : 'Server Error'
       return {
-        statusCode,
-        statusText,
-        headers: responseHeaders,
-        data: intoAsyncIterable(e.stack)
+        status: 200,
+        body: drive.createReadStream(pathname, {
+          start,
+          end
+        }),
+        headers: {
+          ...resHeaders,
+          'Content-Length': `${length}`,
+          'Content-Range': `bytes ${start}-${end}/${size}`
+        }
       }
     }
   }
-
-  function getHyperdrive () {
-    if (Hyperdrive) return Hyperdrive
-    return getSDK().then(({ Hyperdrive }) => Hyperdrive)
+  return {
+    status: 200,
+    headers: {
+      ...resHeaders,
+      'Content-Length': `${size}`
+    },
+    body: drive.createReadStream(pathname)
   }
+}
 
-  function getSDK () {
-    if (sdk) return Promise.resolve(sdk)
-    if (gettingSDK) return gettingSDK
-    gettingSDK = SDK(opts).then((gotSDK) => {
-      sdk = gotSDK
-      gettingSDK = null
-      onClose = async () => sdk.close()
-      Hyperdrive = sdk.Hyperdrive
-
-      return sdk
-    })
-
-    return gettingSDK
-  }
-
-  function checkWritable (archive) {
-    if (!writable) throw new Error(NOT_WRITABLE_ERROR)
-    if (!archive.writable) {
-      throw new Error(NOT_WRITABLE_ERROR)
+async function listEntries (drive, pathname = '/') {
+  const entries = []
+  for await (const path of drive.readdir(pathname)) {
+    const stat = await drive.entry(path)
+    if (stat === null) {
+      entries.push(path + '/')
+    } else {
+      entries.push(path)
     }
   }
-}
-
-function parseDatURL (url) {
-  const parsed = new URL(url)
-  let key = parsed.hostname
-  let version = null
-  if (key.includes('+')) [key, version] = key.split('+')
-
-  parsed.key = key
-  parsed.version = version
-
-  return parsed
-}
-
-async function * intoAsyncIterable (data) {
-  yield Buffer.from(data)
-}
-
-function getMimeType (path) {
-  let mimeType = mime.getType(path) || 'text/plain; charset=utf-8'
-  if (mimeType.startsWith('text/')) mimeType = `${mimeType}; charset=utf-8`
-  return mimeType
-}
-
-function renderDirectory (url, path, files) {
-  return `<!DOCTYPE html>
-<title>${url}</title>
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<h1>Index of ${path}</h1>
-<ul>
-  <li><a href="../">../</a></li>${files.map((file) => `
-  <li><a href="${file}">./${file}</a></li>
-`).join('')}
-</ul>
-`
-}
-
-function renderFiles (headers, responseHeaders, url, path, files) {
-  if (headers.get('Accept') && headers.get('Accept').includes('text/html')) {
-    const page = renderDirectory(url, path, files)
-    responseHeaders['Content-Type'] = 'text/html; charset=utf-8'
-    return intoAsyncIterable(page)
-  } else {
-    const json = JSON.stringify(files, null, '\t')
-    responseHeaders['Content-Type'] = 'application/json; charset=utf-8'
-    return intoAsyncIterable(json)
-  }
-}
-
-function once (ee, name) {
-  return new Promise((resolve, reject) => {
-    const isError = name === 'error'
-    const cb = isError ? reject : resolve
-    ee.once(name, cb)
-  })
-}
-
-async function collect (source) {
-  let buffer = ''
-
-  for await (const chunk of source) {
-    buffer += chunk
-  }
-
-  return buffer
+  return entries
 }
 
 function formatPeers (peers) {
@@ -939,4 +563,9 @@ function formatPeers (peers) {
     }
   })
 }
-*/
+
+function getMimeType (path) {
+  let mimeType = mime.getType(path) || 'text/plain; charset=utf-8'
+  if (mimeType.startsWith('text/')) mimeType = `${mimeType}; charset=utf-8`
+  return mimeType
+}
