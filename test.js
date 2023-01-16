@@ -276,7 +276,7 @@ test.skip('Read directory as HTML', async (t) => {
 
 })
 
-test.only('EventSource extension messages', async (t) => {
+test('EventSource extension messages', async (t) => {
   const domain = await nextURL(t)
 
   const extensionURL = `${domain}$/extensions/example`

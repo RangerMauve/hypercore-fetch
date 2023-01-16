@@ -5,55 +5,51 @@ Implementation of Fetch that uses the Hyper SDK for loading p2p content
 `npm install --save hypercore-fetch`
 
 ```javascript
-const fetch = require('hypercore-fetch')()
+import makeHyperFetch from 'hypercore-fetch'
+import * as SDK from 'hyper-sdk'
 
-const someURL = `hyper://blog.mauve.moe`
+// Create in-memory hyper-sdk instance
+const sdk = await SDK.create({storage: false})
 
-const response = await fetch(`${someURL}/index.json`)
+const fetch = await makeFetch({
+  sdk: true,
+  writable: true
+})
 
-const json = await response.json()
+const someURL = `hyper://TODO_REAL_URL_HERE_PLEASE`
 
-console.log(json)
-```
+const response = await fetch(someURL)
 
-You can also use the bundled CLI
+const data = await response.text()
 
-```
-npm i -g hypercore-fetch
-
-hypercore-fetch hyper://somethingorother
-
-# Or
-
-npx hypercore-fetch hyper://somethingorother
+console.log(data)
 ```
 
 ## API
 
-### `makeFetch({Hyperdrive, resolveURL, base, session, writable}) => fetch()`
+### `makeHyperFetch({sdk, writable=false, extensionMessages = writable, renderIndex}) => fetch()`
 
 Creates a hypercore-fetch instance.
 
-The `base` parameter can be used to specify what the base URL is for relative paths like `fetch('./dat.json')`.
+The `sdk` argument should be an instance of [hyper-sdk](https://github.com/RangerMauve/hyper-sdk).
 
-You can pass in options for the [Dat SDK](https://github.com/datproject/sdk) to have it be auto-created,
-or you can pass in both a function matching  `const archive = Hyperdrive(key)` and a `const resolved = await resolveName(url)` function (where `resolved` is an instance of URL, uses hyper-dns by default).
+The `writable` flag toggles whether the `PUT`/`POST`/`DELETE` methods are available.
 
-Set `session` to your Electron session if you want to enable setting the `body` of fetch requests to Electron's [UploadData](https://www.electronjs.org/docs/api/structures/upload-data) API in their protocol handlers.
+`extensionMessages` enables/disables Hypercore Extension Message support which is used for sending extra data to peers on top of hypercore replication streams.
 
-If you don't want to allow write access to archives, pass in `writable: false`.
+`renderIndex` is an optional function to override the HTML index rendering functionality. By default it will make a simple page which renders links to files and folders within the directory.
+This function takes the `url`, `files` array and `fetch` instance as arguments.
 
-Typically, you don't need to pass in any of these and they're there for more advanced users.
-
-After you've created it, `fetch` will be have like it does in [browsers](https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API).
+After you've created it, `fetch` will behave like it does in [browsers](https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API).
 
 ### Common Headers
 
 Each response will contain a header for the canonical URL represented as a `Link` header with `rel=canonical`.
 
-Each response will also contain the `Allow` header of all the methods currently allowed. If the archive is writable, this will contain `PUT`.
+There is also an `ETag` header which will be a JSON string containging the drive's current `version`, or the file's sequence number.
+This will change only when the drive has gotten an update of some sort and is monotonically incrementing.
 
-There is also an `ETag` header which will be a JSON string containging the drive's current `version`. This will change only when the drive has gotten an update of some sort and is monotonically incrementing.
+If the resource is a file, it may contain the `Last-Modified` header if the file has had a `metadata.mtime` flag set upon update.
 
 ### `fetch('hyper://NAME/example.txt', {method: 'GET'})`
 
@@ -62,9 +58,7 @@ This will attempt to load `example.txt` from the archive labeled by `NAME`.
 It will also load `index.html` files automatically for a folder.
 You can find the details about how resolution works in the [resolve-dat-path](https://github.com/RangerMauve/resolve-dat-path/blob/master/index.js#L3) module.
 
-`NAME` can either be the 64 character hex key for an archive, a domain to parse with [dat-dns](https://www.npmjs.com/package/dat-dns), or a name for an archive which allows you to write to it.
-
-The response headers will contain `X-Blocks` for the number of blocks of data this file represents on disk, and `X-Blocks-Downloaded` which is the number of blocks from this file that have been downloaded locally.
+`NAME` can either be the 52 character [z32 encoded](https://github.com/mafintosh/z32) key for a Hyperdrive or Hypercore , or a domain to parse with the [DNSLink](https://www.dnslink.io/) standard.
 
 ### `fetch('hyper://NAME/example/', {method: 'GET'})`
 
@@ -75,6 +69,7 @@ By default it will return a JSON array of files and folders in that directory.
 You can differentiate a folder from files by the fact that it ends with a `/`.
 
 You can set the `Accept` header to `text/html` in order to have it return a basic HTML page with links to files and folders in that directory.
+This can be overrided with the `renderIndex` option if you want custom index pages.
 
 e.g.
 
@@ -84,58 +79,65 @@ e.g.
 
 Files in the directory will be listed under their name, sub-directories will have a `/` appended to them.
 
-`NAME` can either be the 64 character hex key for an archive, a domain to parse with [dat-dns](https://www.npmjs.com/package/dat-dns), or a name for an archive which allows you to write to it.
+`NAME` can either be the 52 character [z32 encoded](https://github.com/mafintosh/z32) key for a Hyperdrive or Hypercore , or a domain to parse with the [DNSLink](https://www.dnslink.io/) standard.
 
 ### `fetch('hyper://NAME/example/?noResolve', {method: 'GET'})`
 
 Adding `?noResolve` to a URL will prevent resolving `index.html` files and will attempt to load the path as is.
 This can be useful for list files in a directory that would normally render as a page.
 
-`NAME` can either be the 64 character hex key for an archive, a domain to parse with [dat-dns](https://www.npmjs.com/package/dat-dns), or a name for an archive which allows you to write to it.
+`NAME` can either be the 52 character [z32 encoded](https://github.com/mafintosh/z32) key for a Hyperdrive or Hypercore , or a domain to parse with the [DNSLink](https://www.dnslink.io/) standard.
 
-The response headers will contain `X-Blocks` for the number of blocks of data this file represents on disk, and `X-Blocks-Downloaded` which is the number of blocks from this file that have been downloaded locally.
+### `fetch('hyper://localhost/?key=NAME', {method: 'POST'})`
 
-### `fetch('hyper://NAME/', {headers: {'Accept': 'text/event-stream'}})`
+In order to create a writable Hyperdrive with its own URL, you must first generate a keypair for it.
 
-Using the `text/event-stream` content type in the `Accept` header will get back an event stream full of `change` events for every time a file at that path changes.
+`NAME` can be any alphanumeric string which can be used for key generation in [Corestore](https://github.com/holepunchto/corestore).
 
-This can be useful if you want to trigger a download every time a file changes.
-The `data` for the event will contain the version at the time of the change.
+The response body will contain a `hyper://` URL with the new Hyperdrive.
 
-This stream of data can be used with the `EventSource` in browsers.
+You can then use this with `PUT`/`DELETE` requests.
 
-Currently there's no way to watch for changes to specific files, so that should be handled at the application level.
+Note that this is only available with the `writable: true` flag.
 
-You can also watch for the `download` and `upload` events which will be emitted whenever you download or upload blocks from the hyperdrive.
+### `fetch('hyper://localhost/?key=NAME', {method: 'GET'})`
 
-The `data` for the event will contain a JSON encoded object with the `index` of the block, and the `source` which is the public key of the hypercore (either the metadata of the hyperdrive, or the content feed).
+If you want to resolve the public key URL of a previously created Hyperdrive, you can do this with the `GET` method on the key creation URL.
+
+`NAME` can be any alphanumeric string which can be used for key generation in [Corestore](https://github.com/holepunchto/corestore).
+
+The response body will contain a `hyper://` URL with the new Hyperdrive.
+
+You can then use this with `PUT`/`DELETE` requests.
+
+Note that this is only available with the `writable: true` flag.
 
 ### `fetch('hyper://NAME/example.txt', {method: 'PUT', body: 'Hello World'})`
 
 You can add files to archives using a `PUT` method along with a `body`.
 
-The `body` can be either a `String`, an `ArrayBuffer`, a `Blob`, a WHATWG `ReadableStream`, a Node.js `Stream`, or electron's [UploadData](https://www.electronjs.org/docs/api/structures/upload-data) object (make sure to specify the `session` argument in the `makeFetch` function for electron support).
+The `body` can be any of the options supported by the Fetch API such as a `String`, `Blob`, `FormData`, or `ReadableStream`.
 
-`NAME` can either be the 64 character hex key for an archive, a domain to parse with [dat-dns](https://www.npmjs.com/package/dat-dns), or a name for an archive which allows you to write to it.
+`NAME` can either be the 52 character [z32 encoded](https://github.com/mafintosh/z32) key for a Hyperdrive or Hypercore , or a domain to parse with the [DNSLink](https://www.dnslink.io/) standard.
 
-Your `NAME` will likely be a `name` in most cases to ensure you have a writeable archive.
+Note that this is only available with the `writable: true` flag.
 
 ### `fetch('hyper://NAME/folder/', {method: 'PUT', body: new FormData()})`
 
 You can add multiple files to a folder using the `PUT` method with a [FormData](https://developer.mozilla.org/en-US/docs/Web/API/FormData) body.
 
-You can [append](https://developer.mozilla.org/en-US/docs/Web/API/FormData) to a FormData with `formData.append(fieldname, content, 'filename.txt')` where `fieldname` gets ignored (use something like `file`?) the `content` can either be a String, Blob, or some sort of stream.
+You can [append](https://developer.mozilla.org/en-US/docs/Web/API/FormData) to a FormData with `formData.append('file', content, 'filename.txt')` where `fieldname` gets ignored (use something like `file`?) the `content` can either be a String, Blob, or some sort of stream.
 The `filename` will be the filename within the directory that gets created.
 
-`NAME` can either be the 64 character hex key for an archive, a domain to parse with [dat-dns](https://www.npmjs.com/package/dat-dns), or a name for an archive which allows you to write to it.
+Note that you must use the name `file` for uploaded files.
+
+`NAME` can either be the 52 character [z32 encoded](https://github.com/mafintosh/z32) key for a Hyperdrive or Hypercore , or a domain to parse with the [DNSLink](https://www.dnslink.io/) standard.
 
 ### `fetch('hyper://NAME/example.txt', {method: 'DELETE'})`
 
-You can delete a file in an archive by using the `DELETE` method.
+You can delete a file or directory tree in a Hyperdrive by using the `DELETE` method.
 
-You cannot delete directories if they are not empty.
-
-`NAME` can either be the 64 character hex key for an archive, a domain to parse with [dat-dns](https://www.npmjs.com/package/dat-dns), or a name for an archive which allows you to write to it.
+`NAME` can either be the 52 character [z32 encoded](https://github.com/mafintosh/z32) key for a Hyperdrive or Hypercore , or a domain to parse with the [DNSLink](https://www.dnslink.io/) standard.
 
 ### `fetch('hyper://NAME/$/extensions/')`
 
@@ -143,17 +145,23 @@ You can list the current [hypercore extensions](https://github.com/hypercore-pro
 
 This will give you a directory listing with the names of all the extensions.
 
+Note that this requires the `extensionMessages: true` flag.
+
 ### `fetch('hyper://NAME/$/extensions/EXTENSION_NAME')`
 
 You can list the peers that you are replication with which have registered this extension by doing a `GET` to the directory for the extension.
 
 This is also how you can register an extension that hasn't been registered yet.
 
-The list will be a JSON array with objects that contain the fields `remotePublicKey`, `remoteAddress`, `remoteType`, and `stats`
+The list will be a JSON array with objects that contain the fields `remotePublicKey` and `remoteHost`.
+
+Note that this requires the `extensionMessages: true` flag.
 
 ### `fetch('hyper://NAME/$/extensions/', {headers: {'Accept': 'text/event-stream'}})`
 
 Using the `text/event-stream` content type in the `Accept` header will get back an event stream with the extension events.
+
+You can get the browser's [EventSource API](https://developer.mozilla.org/en-US/docs/Web/API/EventSource) over hypercore-fetch by using the [@rangermauve/fetch-to-eventsource](https://github.com/RangerMauve/fetch-event-source) module.
 
 The `event` will be the name of the extension you got the data for, the `id` (accessible by `e.lastEventId` in EventSource) will be set to the ID of the peer that sent it.
 
@@ -161,14 +169,22 @@ Only extension messages that have been queried before via a `GET` to the EXTENSI
 
 There are also two special events: `peer-open` which gets emitted whena new peer has connected, and `peer-remove` which gets emitted when an existing peer disconnects.
 
+Note that this requires the `extensionMessages: true` flag.
+
 ### `fetch('hyper://NAME/$/extensions/EXTENSION_NAME', {method: 'POST', body: 'Example'})`
 
 You can broadcast an extension message to all peers that are replicating that extension type with a `POST` to the extension's URL.
 
-The `body` of the request will be used as the payload. Please note that only utf8 encoded text is currently supported due to limitations of the event-stream encoding.
+The `body` of the request will be used as the payload.
+Please note that only utf8 encoded text is currently supported due to limitations of the event-stream encoding.
+
+Note that this requires the `extensionMessages: true` flag.
 
 ### `fetch('hyper://NAME/$/extensions/EXTENSION_NAME/REMOTE_PUBLIC_KEY', {method: 'POST', body: 'Example'})`
 
 You can send an extension message to a specific peer by doing a `POST` to the extension with their remote public key ID.
 
-The `body` of the request will be used as the payload. Please note that only utf8 encoded text is currently supported due to limitations of the event-stream encoding.
+The `body` of the request will be used as the payload.
+Please note that only utf8 encoded text is currently supported due to limitations of the event-stream encoding.
+
+Note that this requires the `extensionMessages: true` flag.

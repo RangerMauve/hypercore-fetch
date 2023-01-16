@@ -356,11 +356,13 @@ export default async function makeHyperFetch ({
     const noResolve = searchParams.has('noResolve')
     const isDirectory = pathname.endsWith('/')
 
-    const resHeaders = {
-      'Accept-Ranges': 'bytes'
-    }
-
     const drive = await getDrive(hostname)
+
+    const resHeaders = {
+      ETag: `${drive.version}`,
+      'Accept-Ranges': 'bytes',
+      Link: `<${drive.core.url}>; rel="canonical"`
+    }
 
     if (isDirectory) {
       const entries = await listEntries(drive, pathname)
@@ -459,13 +461,21 @@ export default async function makeHyperFetch ({
     const drive = await getDrive(hostname)
 
     if (isDirectory) {
+      const resHeaders = {
+        ETag: `${drive.version}`,
+        Link: `<${drive.core.url}>; rel="canonical"`
+      }
+
       const entries = await listEntries(drive, pathname)
 
       if (!entries.length && pathname !== '/') {
         return {
           status: 404,
           body: '[]',
-          headers: { [HEADER_CONTENT_TYPE]: MIME_APPLICATION_JSON }
+          headers: {
+            ...resHeaders,
+            [HEADER_CONTENT_TYPE]: MIME_APPLICATION_JSON
+          }
         }
       }
 
@@ -480,14 +490,20 @@ export default async function makeHyperFetch ({
         return {
           status: 200,
           body,
-          headers: { [HEADER_CONTENT_TYPE]: MIME_TEXT_HTML }
+          headers: {
+            ...resHeaders,
+            [HEADER_CONTENT_TYPE]: MIME_TEXT_HTML
+          }
         }
       }
 
       return {
         status: 200,
         body: JSON.stringify(entries, null, '\t'),
-        headers: { [HEADER_CONTENT_TYPE]: MIME_APPLICATION_JSON }
+        headers: {
+          ...resHeaders,
+          [HEADER_CONTENT_TYPE]: MIME_APPLICATION_JSON
+        }
       }
     }
     const entry = await drive.entry(pathname)
@@ -511,7 +527,8 @@ async function serveFile (headers, drive, pathname) {
   const resHeaders = {
     ETag: `${entry.seq}`,
     [HEADER_CONTENT_TYPE]: contentType,
-    'Accept-Ranges': 'bytes'
+    'Accept-Ranges': 'bytes',
+    Link: `<${drive.core.url}>; rel="canonical"`
   }
 
   if (entry.metadata?.mtime) {

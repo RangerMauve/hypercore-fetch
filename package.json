@@ -2,9 +2,6 @@
   "name": "hypercore-fetch",
   "version": "8.6.1",
   "description": "Implementation of Fetch that uses the Dat SDK for loading p2p content",
-  "bin": {
-    "hypercore-fetch": "bin.js"
-  },
   "type": "module",
   "scripts": {
     "test": "node test",
@@ -33,7 +30,7 @@
     "streamx": "^2.13.0"
   },
   "devDependencies": {
-    "@rangermauve/fetch-event-source": "^1.0.2",
+    "@rangermauve/fetch-event-source": "^1.0.3",
     "hyper-sdk": "^4.1.0",
     "standard": "^17.0.0",
     "tape": "^5.2.2"
