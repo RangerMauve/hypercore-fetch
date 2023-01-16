@@ -33,7 +33,7 @@
     "streamx": "^2.13.0"
   },
   "devDependencies": {
-    "@rangermauve/fetch-event-source": "^1.0.1",
+    "@rangermauve/fetch-event-source": "^1.0.2",
     "hyper-sdk": "^4.1.0",
     "standard": "^17.0.0",
     "tape": "^5.2.2"

@@ -48,6 +48,19 @@ export default async function makeHyperFetch ({
   // Map loaded drive hostnames to their keys
   // TODO: Track LRU + cache clearing
   const drives = new Map()
+  const extensions = new Map()
+  const cores = new Map()
+
+  async function getCore (hostname) {
+    if (cores.has(hostname)) {
+      return cores.get(hostname)
+    }
+    const core = await sdk.get(hostname)
+    await core.ready()
+    cores.set(core.id, core)
+    cores.set(core.url, core)
+    return core
+  }
 
   async function getDBCoreForName (name) {
     const corestore = sdk.namespace(name)
@@ -71,7 +84,7 @@ export default async function makeHyperFetch ({
       return drives.get(hostname)
     }
 
-    const core = await sdk.get(hostname)
+    const core = await getCore(hostname)
 
     const corestore = sdk.namespace(core.id)
     const drive = new Hyperdrive(corestore, core.key)
@@ -104,10 +117,16 @@ export default async function makeHyperFetch ({
     return drive
   }
 
-  function getExtension (core, name) {
+  async function getExtension (core, name) {
+    const key = core.url + name
+    if (extensions.has(key)) {
+      return extensions.get(key)
+    }
     const existing = core.extensions.get(name)
-    if (existing) return existing
-    console.log('Initializing extension', name, core.url)
+    if (existing) {
+      extensions.set(key, existing)
+      return existing
+    }
 
     const extension = core.registerExtension(name, {
       encoding: 'utf8',
@@ -116,29 +135,20 @@ export default async function makeHyperFetch ({
       }
     })
 
-    // console.log('Got extension', extension, core.extensions)
+    extensions.set(key, extension)
 
     return extension
   }
 
-  function getExtensionPeers (core, name) {
+  async function getExtensionPeers (core, name) {
     // List peers with this extension
     const allPeers = core.peers
     return allPeers.filter((peer) => {
-      const { remoteExtensions } = peer
-
-      if (!remoteExtensions) return false
-
-      const { names } = remoteExtensions
-
-      if (!names) return false
-
-      return names.includes(name)
+      return peer?.extensions?.has(name)
     })
   }
 
   function listExtensionNames (core) {
-    // console.log(core.extensions, core.url)
     return [...core.extensions.keys()]
   }
 
@@ -147,7 +157,7 @@ export default async function makeHyperFetch ({
       const { hostname } = new URL(request.url)
       const accept = request.headers.get('Accept') || ''
 
-      const core = await sdk.get(`hyper://${hostname}/`)
+      const core = await getCore(`hyper://${hostname}/`)
 
       if (accept.includes('text/event-stream')) {
         const events = new EventIterator(({ push }) => {
@@ -156,6 +166,7 @@ export default async function makeHyperFetch ({
             // TODO: Fancy verification on the `name`?
             // Send each line of content separately on a `data` line
             const data = content.split('\n').map((line) => `data:${line}\n`).join('')
+
             push(`id:${id}\nevent:${name}\n${data}\n`)
           }
           function onPeerOpen (peer) {
@@ -198,11 +209,11 @@ export default async function makeHyperFetch ({
       const { hostname, pathname } = new URL(request.url)
       const name = pathname.slice(`/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/`.length)
 
-      const core = await sdk.get(`hyper://${hostname}/`)
+      const core = await getCore(`hyper://${hostname}/`)
 
       await getExtension(core, name)
 
-      const peers = getExtensionPeers(core, name)
+      const peers = await getExtensionPeers(core, name)
       const finalPeers = formatPeers(peers)
       const body = JSON.stringify(finalPeers, null, '\t')
 
@@ -218,10 +229,10 @@ export default async function makeHyperFetch ({
       const { hostname, pathname } = new URL(request.url)
       const name = pathname.slice(`/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/`.length)
 
-      const core = await sdk.get(`hyper://${hostname}/`)
+      const core = await getCore(`hyper://${hostname}/`)
 
       const extension = await getExtension(core, name)
-      const data = await request.arrayBuffer()
+      const data = await request.text()
       extension.broadcast(data)
 
       return { status: 200 }
@@ -231,10 +242,10 @@ export default async function makeHyperFetch ({
       const subFolder = pathname.slice(`/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/`.length)
       const [name, extensionPeer] = subFolder.split('/')
 
-      const core = await sdk.get(`hyper://${hostname}/`)
+      const core = await getCore(`hyper://${hostname}/`)
 
       const extension = await getExtension(core, name)
-      const peers = getExtensionPeers(core, name)
+      const peers = await getExtensionPeers(core, name)
       const peer = peers.find(({ remotePublicKey }) => remotePublicKey.toString('hex') === extensionPeer)
       if (!peer) {
         return {
@@ -554,12 +565,12 @@ async function listEntries (drive, pathname = '/') {
 }
 
 function formatPeers (peers) {
-  return peers.map(({ remotePublicKey, remoteAddress, remoteType, stats }) => {
+  return peers.map((peer) => {
+    const remotePublicKey = peer.remotePublicKey.toString('hex')
+    const remoteHost = peer.stream?.rawStream?.remoteHost
     return {
-      remotePublicKey: remotePublicKey.toString('hex'),
-      remoteType,
-      remoteAddress,
-      stats
+      remotePublicKey,
+      remoteHost
     }
   })
 }

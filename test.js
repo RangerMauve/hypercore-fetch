@@ -295,12 +295,6 @@ test.only('EventSource extension messages', async (t) => {
   // Extension list will always be alphabetically sorted
   t.deepEqual(extensionList, ['example'], 'Got expected list of extensions')
 
-  return
-
-  // Wait a bit for them to connect
-  // TODO: Peers API
-  await delay(2000)
-
   const peerResponse1 = await fetch(extensionURL)
   const peerList1 = await peerResponse1.json()
 
@@ -311,8 +305,6 @@ test.only('EventSource extension messages', async (t) => {
 
   t.equal(peerList2.length, 1, 'Got one peer for extension message on peer2')
 
-  return
-
   const { EventSource } = createEventSource(fetch)
   const source = new EventSource(extensionListURL)
 
@@ -322,25 +314,21 @@ test.only('EventSource extension messages', async (t) => {
   ])
 
   const toRead = Promise.race([
-    once(source, 'message'),
+    once(source, 'example'),
     once(source, 'error').then(([e]) => { throw e })
   ])
 
-  // await delay(500)
-
-  const broadcastRequest = await fetch2(extensionURL, { method: 'POST', body: 'Hello World' })
+  const broadcastRequest = await fetch2(extensionURL, { method: 'POST', body: SAMPLE_CONTENT })
 
   t.ok(broadcastRequest.ok, 'Able to broadcast to peers')
 
-  const [data] = await toRead
+  const [event] = await toRead
 
-  console.log(data)
+  const { type, data, lastEventId } = event
 
-  t.ok(data.value, 'Got eventsource data after writing')
-  t.ok(data.value.includes('event:example\n'), 'EventSource data represents an example event')
-  t.ok(data.value.includes('data:Hello World\n'), 'EventSource data contains expected body')
-  t.ok(data.value.includes('id:'), 'EventSource data contains an ID')
-  t.ok(data.value.endsWith('\n\n'), 'Ends with two newlines')
+  t.equal(data, SAMPLE_CONTENT, 'Got data from event')
+  t.equal(type, 'example', 'Event got set to extension message name')
+  t.ok(lastEventId, 'Event contained peer ID')
 })
 
 async function checkResponse (response, t, successMessage = 'Response OK') {
