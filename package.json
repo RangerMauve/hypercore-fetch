@@ -3,6 +3,7 @@
   "version": "8.6.2-0",
   "description": "Implementation of Fetch that uses the Dat SDK for loading p2p content",
   "type": "module",
+  "main": "index.js",
   "scripts": {
     "test": "node test",
     "lint": "standard --fix"
