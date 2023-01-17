@@ -293,7 +293,7 @@ export default async function makeHyperFetch ({
       const contentType = request.headers.get('Content-Type') || ''
       const isFormData = contentType.includes('multipart/form-data')
 
-      const drive = await getDrive(hostname)
+      const drive = await getDrive(`hyper://${hostname}`)
 
       if (isFormData) {
         // It's a form! Get the files out and process them
@@ -322,7 +322,7 @@ export default async function makeHyperFetch ({
     router.delete('hyper://*/**', async function putFiles (request) {
       const { hostname, pathname } = new URL(request.url)
 
-      const drive = await getDrive(hostname)
+      const drive = await getDrive(`hyper://${hostname}`)
 
       if (pathname.endsWith('/')) {
         let didDelete = false
@@ -355,7 +355,7 @@ export default async function makeHyperFetch ({
     const noResolve = searchParams.has('noResolve')
     const isDirectory = pathname.endsWith('/')
 
-    const drive = await getDrive(hostname)
+    const drive = await getDrive(`hyper://${hostname}`)
 
     const resHeaders = {
       ETag: `${drive.version}`,
@@ -458,7 +458,7 @@ export default async function makeHyperFetch ({
     const noResolve = searchParams.has('noResolve')
     const isDirectory = pathname.endsWith('/')
 
-    const drive = await getDrive(hostname)
+    const drive = await getDrive(`hyper://${hostname}`)
 
     if (isDirectory) {
       const resHeaders = {

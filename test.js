@@ -322,6 +322,14 @@ test('Resolve pretty markdown URLs', async (t) => {
   t.equal(contentType, 'text/markdown; charset=utf-8', 'Got markdown mime type')
 })
 
+test('Doing a `GET` on an invalid domain should cause an error', async (t) => {
+  const url = 'hyper://example/'
+
+  const failedResponse = await fetch(url)
+
+  t.notOk(failedResponse.ok, 'Response errored out due to invalid domain')
+})
+
 test('EventSource extension messages', async (t) => {
   const domain = await nextURL(t)
 
