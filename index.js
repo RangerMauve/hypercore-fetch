@@ -409,7 +409,8 @@ export default async function makeHyperFetch ({
         }
       }
     }
-    const entry = await drive.entry(pathname)
+
+    const { entry, path } = await resolvePath(drive, pathname, noResolve)
 
     if (!entry) {
       return { status: 404, body: 'Not Found' }
@@ -417,7 +418,7 @@ export default async function makeHyperFetch ({
 
     resHeaders.ETag = `${entry.seq}`
 
-    const contentType = getMimeType(pathname)
+    const contentType = getMimeType(path)
     resHeaders['Content-Type'] = contentType
 
     if (entry.metadata?.mtime) {
@@ -486,7 +487,7 @@ export default async function makeHyperFetch ({
       }
 
       if (accept.includes('text/html')) {
-        const body = renderIndex(url, entries, fetch)
+        const body = await renderIndex(url, entries, fetch)
         return {
           status: 200,
           body,
@@ -506,13 +507,14 @@ export default async function makeHyperFetch ({
         }
       }
     }
-    const entry = await drive.entry(pathname)
+
+    const { entry, path } = await resolvePath(drive, pathname, noResolve)
 
     if (!entry) {
       return { status: 404, body: 'Not Found' }
     }
 
-    return serveFile(request.headers, drive, pathname)
+    return serveFile(request.headers, drive, path)
   })
 
   return fetch
@@ -566,6 +568,31 @@ async function serveFile (headers, drive, pathname) {
     },
     body: drive.createReadStream(pathname)
   }
+}
+
+function makeToTry (pathname) {
+  return [
+    pathname,
+    pathname + '.html',
+    pathname + '.md'
+  ]
+}
+
+async function resolvePath (drive, pathname, noResolve) {
+  if (noResolve) {
+    const entry = drive.entry(pathname)
+
+    return { entry, path: pathname }
+  }
+
+  for (const path of makeToTry(pathname)) {
+    const entry = await drive.entry(path)
+    if (entry) {
+      return { entry, path }
+    }
+  }
+
+  return { entry: null, path: null }
 }
 
 async function listEntries (drive, pathname = '/') {

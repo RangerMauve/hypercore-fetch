@@ -93,11 +93,11 @@ test('PUT file', async (t) => {
     body: SAMPLE_CONTENT
   })
 
-  await checkResponse(uploadResponse, t)
+  await checkResponse(uploadResponse, t, 'upload successful')
 
   const uploadedContentResponse = await fetch(uploadLocation)
 
-  await checkResponse(uploadedContentResponse, t)
+  await checkResponse(uploadedContentResponse, t, 'able to load content')
 
   const content = await uploadedContentResponse.text()
   const contentType = uploadedContentResponse.headers.get('Content-Type')
@@ -272,8 +272,54 @@ test('Ignore index.html with noResolve', async (t) => {
   const entries = await listDirRequest.json()
   t.deepEqual(entries, ['index.html'], 'able to list index.html')
 })
-test.skip('Read directory as HTML', async (t) => {
+test('Read directory as HTML', async (t) => {
+  const created = await nextURL(t)
 
+  const formData = new FormData()
+  formData.append('file', new Blob([SAMPLE_CONTENT]), 'example.txt')
+  formData.append('file', new Blob([SAMPLE_CONTENT]), 'example2.txt')
+
+  const uploadedResponse = await fetch(created, {
+    method: 'put',
+    body: formData
+  })
+  await checkResponse(uploadedResponse, t)
+
+  const listDirRequest = await fetch(created, {
+    headers: {
+      Accept: 'text/html'
+    }
+  })
+  await checkResponse(listDirRequest, t, 'Able to list HTML')
+
+  const html = await listDirRequest.text()
+
+  t.equal(listDirRequest.headers.get('Content-Type'), 'text/html; charset=utf-8', 'Returned HTML in mime type')
+  t.ok(html.includes('<title'), 'Listing has title')
+  t.ok(html.includes('./example.txt'), 'Listing has link to file')
+})
+test('Resolve pretty markdown URLs', async (t) => {
+  const created = await nextURL(t)
+
+  const uploadLocation = new URL('./example.md', created)
+
+  const uploadResponse = await fetch(uploadLocation, {
+    method: 'put',
+    body: SAMPLE_CONTENT
+  })
+  await checkResponse(uploadResponse, t)
+
+  const resolvedLocation = new URL('/example', created)
+
+  const uploadedContentResponse = await fetch(resolvedLocation)
+
+  await checkResponse(uploadedContentResponse, t, 'able to load content')
+
+  const content = await uploadedContentResponse.text()
+  const contentType = uploadedContentResponse.headers.get('Content-Type')
+
+  t.equal(content, SAMPLE_CONTENT, 'Got original content out')
+  t.equal(contentType, 'text/markdown; charset=utf-8', 'Got markdown mime type')
 })
 
 test('EventSource extension messages', async (t) => {
