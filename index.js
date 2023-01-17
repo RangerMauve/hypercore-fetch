@@ -317,8 +317,7 @@ export default async function makeHyperFetch ({
         )
       }
 
-      // TODO: Use 201 with location in response headers
-      return { status: 200 }
+      return { status: 201, headers: { Location: request.url } }
     })
     router.delete('hyper://*/**', async function putFiles (request) {
       const { hostname, pathname } = new URL(request.url)
