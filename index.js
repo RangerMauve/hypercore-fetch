@@ -271,7 +271,7 @@ export default async function makeHyperFetch ({
 
       const drive = await getDriveFromKey(key, true)
 
-      return { body: drive.url }
+      return { body: drive.core.url }
     })
     router.post(`hyper://${SPECIAL_DOMAIN}/`, async function createKey (request) {
       // TODO: Allow importing secret keys here
