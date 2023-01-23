@@ -360,7 +360,7 @@ export default async function makeHyperFetch ({
     const resHeaders = {
       ETag: `${drive.version}`,
       'Accept-Ranges': 'bytes',
-      Link: `<${drive.core.url}>; rel="canonical"`
+      Link: `<${drive.core.url}${pathname.substring(1)}>; rel="canonical"`
     }
 
     if (isDirectory) {
@@ -463,7 +463,7 @@ export default async function makeHyperFetch ({
     if (isDirectory) {
       const resHeaders = {
         ETag: `${drive.version}`,
-        Link: `<${drive.core.url}>; rel="canonical"`
+        Link: `<${drive.core.url}${pathname.substring(1)}>; rel="canonical"`
       }
 
       const entries = await listEntries(drive, pathname)
@@ -529,7 +529,7 @@ async function serveFile (headers, drive, pathname) {
     ETag: `${entry.seq}`,
     [HEADER_CONTENT_TYPE]: contentType,
     'Accept-Ranges': 'bytes',
-    Link: `<${drive.core.url}>; rel="canonical"`
+    Link: `<${drive.core.url}${pathname.substring(1)}>; rel="canonical"`
   }
 
   if (entry.metadata?.mtime) {
