@@ -1,6 +1,6 @@
 {
   "name": "hypercore-fetch",
-  "version": "9.0.2",
+  "version": "9.0.3",
   "description": "Implementation of Fetch that uses the Dat SDK for loading p2p content",
   "type": "module",
   "main": "index.js",
