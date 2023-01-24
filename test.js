@@ -72,7 +72,9 @@ test('Quick check', async (t) => {
 
   const content = await uploadedContentResponse.text()
   const contentType = uploadedContentResponse.headers.get('Content-Type')
+  const contentLink = uploadedContentResponse.headers.get('Link')
 
+  t.match(contentLink, /^<hyper:\/\/[0-9a-z]{52}\/example.txt>; rel="canonical"$/, 'Link header includes both public key and path.')
   t.equal(contentType, 'text/plain; charset=utf-8', 'Content got expected mime type')
   t.equal(content, SAMPLE_CONTENT, 'Got uploaded content back out')
 

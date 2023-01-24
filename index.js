@@ -356,11 +356,12 @@ export default async function makeHyperFetch ({
     const isDirectory = pathname.endsWith('/')
 
     const drive = await getDrive(`hyper://${hostname}`)
+    const fullURL = new URL(pathname, drive.core.url).href
 
     const resHeaders = {
       ETag: `${drive.version}`,
       'Accept-Ranges': 'bytes',
-      Link: `<${drive.core.url}>; rel="canonical"`
+      Link: `<${fullURL}>; rel="canonical"`
     }
 
     if (isDirectory) {
@@ -415,6 +416,8 @@ export default async function makeHyperFetch ({
       return { status: 404, body: 'Not Found' }
     }
 
+    resHeaders.Link = new URL(path, drive.core.url).href
+
     resHeaders.ETag = `${entry.seq}`
 
     const contentType = getMimeType(path)
@@ -459,11 +462,12 @@ export default async function makeHyperFetch ({
     const isDirectory = pathname.endsWith('/')
 
     const drive = await getDrive(`hyper://${hostname}`)
+    const fullURL = new URL(pathname, drive.core.url).href
 
     if (isDirectory) {
       const resHeaders = {
         ETag: `${drive.version}`,
-        Link: `<${drive.core.url}>; rel="canonical"`
+        Link: `<${fullURL}>; rel="canonical"`
       }
 
       const entries = await listEntries(drive, pathname)
@@ -523,13 +527,15 @@ async function serveFile (headers, drive, pathname) {
   const isRanged = headers.get('Range') || ''
   const contentType = getMimeType(pathname)
 
+  const fullURL = new URL(pathname, drive.core.url).href
+
   const entry = await drive.entry(pathname)
 
   const resHeaders = {
     ETag: `${entry.seq}`,
     [HEADER_CONTENT_TYPE]: contentType,
     'Accept-Ranges': 'bytes',
-    Link: `<${drive.core.url}>; rel="canonical"`
+    Link: `<${fullURL}>; rel="canonical"`
   }
 
   if (entry.metadata?.mtime) {
