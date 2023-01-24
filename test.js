@@ -85,6 +85,32 @@ test('Quick check', async (t) => {
   t.deepEqual(await dirResponse.json(), ['example.txt'], 'File got added')
 })
 
+test('GET full url for created keys', async (t) => {
+  const keyURL = `hyper://localhost/?key=example${next()}`
+
+  const nonExistingResponse = await fetch(keyURL)
+
+  t.notOk(nonExistingResponse.ok, 'response has error before key is created')
+  const errorMessage = await nonExistingResponse.text()
+
+  t.equal(nonExistingResponse.status, 400, 'Got 400 error code')
+  t.notOk(errorMessage.startsWith('hyper://'), 'did not return hyper URL')
+
+  const createResponse = await fetch(keyURL, { method: 'post' })
+  await checkResponse(createResponse, t, 'Able to create drive')
+
+  const createdURL = await createResponse.text()
+
+  t.ok(createdURL.startsWith('hyper://'), 'Got new hyper:// URL')
+
+  const nowExistingResponse = await fetch(keyURL)
+  await checkResponse(nowExistingResponse, t,'GET no longer fails on create')
+
+  const existingURL = await nowExistingResponse.text()
+
+  t.equal(existingURL, createdURL, 'URL same as in initial create')
+})
+
 test('PUT file', async (t) => {
   const created = await nextURL(t)
 

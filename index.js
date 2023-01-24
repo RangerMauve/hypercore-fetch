@@ -23,6 +23,8 @@ const MIME_EVENT_STREAM = 'text/event-stream; charset=utf-8'
 
 const HEADER_CONTENT_TYPE = 'Content-Type'
 
+export const ERROR_KEY_NOT_CREATED = 'Must create key with POST before reading'
+
 async function DEFAULT_RENDER_INDEX (url, files, fetch) {
   return `
 <!DOCTYPE html>
@@ -103,7 +105,7 @@ export default async function makeHyperFetch ({
     }
     const core = await getDBCoreForName(key)
     if (!core.length && errorOnNew) {
-      return { status: 400, body: 'Must create key with POST before reading' }
+      throw new Error(ERROR_KEY_NOT_CREATED)
     }
 
     const corestore = sdk.namespace(key)
@@ -269,9 +271,21 @@ export default async function makeHyperFetch ({
         return { status: 400, body: 'Must specify key parameter to resolve' }
       }
 
-      const drive = await getDriveFromKey(key, true)
+      try {
+        const drive = await getDriveFromKey(key, true)
 
-      return { body: drive.core.url }
+        return { body: drive.core.url }
+      } catch (e) {
+        if (e.message === ERROR_KEY_NOT_CREATED) {
+          return {
+            status: 400,
+            body: e.message,
+            headers: {
+              [HEADER_CONTENT_TYPE]: MIME_TEXT_PLAIN
+            }
+          }
+        } else throw e
+      }
     })
     router.post(`hyper://${SPECIAL_DOMAIN}/`, async function createKey (request) {
       // TODO: Allow importing secret keys here
