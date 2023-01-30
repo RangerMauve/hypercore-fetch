@@ -216,6 +216,41 @@ test('PUT to overwrite a file', async (t) => {
   t.equal(contentType, 'text/plain; charset=utf-8', 'Content got expected mime type')
   t.equal(content, SHORTER_CONTENT, 'Got uploaded content back out')
 })
+test('PUT file and directory with same path', async (t) => {
+  // Hyperdrive allows creation of entries which have the same path as an existing prefix and vice versa
+  // Ensure that both entries and prefixes appear in directory listings
+  const created = await nextURL(t)
+
+  const outerLocation = new URL('./outer', created)
+  const outerUploadResponse = await fetch(outerLocation, {
+    method: 'put',
+    body: SAMPLE_CONTENT
+  })
+  await checkResponse(outerUploadResponse, t)
+
+  const innerLocation = new URL('./outer/inner', created)
+  const innerUploadResponse = await fetch(innerLocation, {
+    method: 'put',
+    body: SAMPLE_CONTENT
+  })
+  await checkResponse(innerUploadResponse, t)
+
+  const outerGetResponse = await fetch(outerLocation)
+  await checkResponse(outerGetResponse, t)
+  const outerContent = await outerGetResponse.text()
+  t.equal(outerContent, SAMPLE_CONTENT)
+
+  const innerGetResponse = await fetch(innerLocation)
+  await checkResponse(innerGetResponse, t)
+  const innerContent = await innerGetResponse.text()
+  t.equal(innerContent, SAMPLE_CONTENT)
+
+  const topDirLocation = new URL('./', created)
+  const topDirGetResponse = await fetch(topDirLocation)
+  await checkResponse(topDirGetResponse, t)
+  const topDirEntries = await topDirGetResponse.json()
+  t.deepEqual(topDirEntries, ['outer/', 'outer'], 'new file is listed') // TODO: In which order should the entries appear?
+})
 test('DELETE a file', async (t) => {
   const created = await nextURL(t)
 
