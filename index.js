@@ -327,7 +327,11 @@ export default async function makeHyperFetch ({
       } else {
         await pipelinePromise(
           Readable.from(request.body),
-          drive.createWriteStream(pathname)
+          drive.createWriteStream(pathname, {
+            metadata: {
+              mtime: Date.now()
+            }
+          })
         )
       }
 

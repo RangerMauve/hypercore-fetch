@@ -104,7 +104,7 @@ test('GET full url for created keys', async (t) => {
   t.ok(createdURL.startsWith('hyper://'), 'Got new hyper:// URL')
 
   const nowExistingResponse = await fetch(keyURL)
-  await checkResponse(nowExistingResponse, t,'GET no longer fails on create')
+  await checkResponse(nowExistingResponse, t, 'GET no longer fails on create')
 
   const existingURL = await nowExistingResponse.text()
 
