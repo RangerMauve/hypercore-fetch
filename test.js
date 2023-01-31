@@ -182,10 +182,16 @@ test('PUT into new directory', async (t) => {
   t.equal(contentType, 'text/plain; charset=utf-8', 'Content got expected mime type')
   t.equal(content, SAMPLE_CONTENT, 'Got uploaded content back out')
 
-  const listDirRequest = await fetch(created)
-  await checkResponse(listDirRequest, t)
-  const entries = await listDirRequest.json()
-  t.deepEqual(entries, ['subfolder/'], 'new files are listed')
+  const topDirResponse = await fetch(created)
+  await checkResponse(topDirResponse, t)
+  const topDirEntries = await topDirResponse.json()
+  t.deepEqual(topDirEntries, ['subfolder/'], 'subdirectory is listed')
+
+  const subDir = new URL('./subfolder/', created)
+  const subDirResponse = await fetch(subDir)
+  await checkResponse(subDirResponse, t)
+  const subDirEntries = await subDirResponse.json()
+  t.deepEqual(subDirEntries, ['example.txt'], 'new file is listed')
 })
 test('PUT to overwrite a file', async (t) => {
   const created = await nextURL(t)
