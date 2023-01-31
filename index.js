@@ -22,6 +22,7 @@ const MIME_TEXT_HTML = 'text/html; charset=utf-8'
 const MIME_EVENT_STREAM = 'text/event-stream; charset=utf-8'
 
 const HEADER_CONTENT_TYPE = 'Content-Type'
+const HEADER_LAST_MODIFIED = 'Last-Modified'
 
 export const ERROR_KEY_NOT_CREATED = 'Must create key with POST before reading'
 
@@ -439,11 +440,12 @@ export default async function makeHyperFetch ({
     resHeaders.ETag = `${entry.seq}`
 
     const contentType = getMimeType(path)
-    resHeaders['Content-Type'] = contentType
+    resHeaders[HEADER_CONTENT_TYPE] = contentType
 
-    if (entry.metadata?.mtime) {
-      const date = new Date(entry.metadata.mtime)
-      resHeaders['Last-Modified'] = date.toUTCString()
+
+    if (entry?.value?.metadata?.mtime) {
+      const date = new Date(entry.value.metadata.mtime)
+      resHeaders[HEADER_LAST_MODIFIED] = date.toUTCString()
     }
 
     const size = entry.value.byteLength
@@ -549,6 +551,7 @@ async function serveFile (headers, drive, pathname) {
 
   const entry = await drive.entry(pathname)
 
+
   const resHeaders = {
     ETag: `${entry.seq}`,
     [HEADER_CONTENT_TYPE]: contentType,
@@ -556,9 +559,10 @@ async function serveFile (headers, drive, pathname) {
     Link: `<${fullURL}>; rel="canonical"`
   }
 
-  if (entry.metadata?.mtime) {
-    const date = new Date(entry.metadata.mtime)
-    resHeaders['Last-Modified'] = date.toUTCString()
+
+  if (entry?.value?.metadata?.mtime) {
+    const date = new Date(entry.value.metadata.mtime)
+    resHeaders[HEADER_LAST_MODIFIED] = date.toUTCString()
   }
 
   const size = entry.value.blob.byteLength

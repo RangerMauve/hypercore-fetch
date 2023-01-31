@@ -129,9 +129,11 @@ test('PUT file', async (t) => {
 
   const content = await uploadedContentResponse.text()
   const contentType = uploadedContentResponse.headers.get('Content-Type')
+  const lastModified = uploadedContentResponse.headers.get('Last-Modified')
 
   t.equal(contentType, 'text/plain; charset=utf-8', 'Content got expected mime type')
   t.equal(content, SAMPLE_CONTENT, 'Got uploaded content back out')
+  t.ok(lastModified, 'Last-Modified header got set')
 })
 test('PUT FormData', async (t) => {
   const created = await nextURL(t)
