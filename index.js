@@ -621,7 +621,8 @@ async function resolvePath (drive, pathname, noResolve) {
 async function listEntries (drive, pathname = '/') {
   const entries = []
   for await (const path of drive.readdir(pathname)) {
-    const stat = await drive.entry(path)
+    const fullPath = posix.join(pathname, path)
+    const stat = await drive.entry(fullPath)
     if (stat === null) {
       entries.push(path + '/')
     } else {
