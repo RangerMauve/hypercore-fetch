@@ -435,10 +435,6 @@ export default async function makeHyperFetch ({
       return { status: 404, body: 'Not Found' }
     }
 
-    resHeaders.Link = new URL(path, drive.core.url).href
-
-    resHeaders.ETag = `${entry.seq}`
-
     const contentType = getMimeType(path)
     resHeaders[HEADER_CONTENT_TYPE] = contentType
 
