@@ -111,6 +111,29 @@ test('GET full url for created keys', async (t) => {
   t.equal(existingURL, createdURL, 'URL same as in initial create')
 })
 
+test('HEAD request', async (t) => {
+  const created = await nextURL(t)
+  const uploadLocation = new URL('./example.txt', created)
+  await fetch(uploadLocation, { method: 'put', body: SAMPLE_CONTENT })
+  const uploadedContentResponse = await fetch(uploadLocation, { method: 'head' })
+
+  const headersEtag = uploadedContentResponse.headers.get('Etag')
+  const headersContentType = uploadedContentResponse.headers.get('Content-Type')
+  const headersContentLength = uploadedContentResponse.headers.get('Content-Length')
+  const headersAcceptRanges = uploadedContentResponse.headers.get('Accept-Ranges')
+  const headersContentRange = uploadedContentResponse.headers.get('Content-Range')
+  const headersLastModified = uploadedContentResponse.headers.get('Last-Modified')
+  const headersLink = uploadedContentResponse.headers.get('Link')
+
+  t.equal(headersEtag, '2', 'Headers got expected etag')
+  t.equal(headersContentType, 'text/plain; charset=utf-8', 'Headers got expected mime type')
+  t.ok(headersContentLength, "Headers have 'Content-Length' set.")
+  t.ok(headersContentRange, "Headers have 'Content-Range' set.")
+  t.ok(headersLastModified, "Headers have 'Last-Modified' set.")
+  t.equal(headersAcceptRanges, "bytes")
+  t.match(headersLink, /^<hyper:\/\/[0-9a-z]{52}\/example.txt>; rel="canonical"$/, 'Link header includes both public key and path.')
+})
+
 test('PUT file', async (t) => {
   const created = await nextURL(t)
 
