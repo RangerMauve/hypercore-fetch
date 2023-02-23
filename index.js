@@ -436,10 +436,10 @@ export default async function makeHyperFetch ({
     }
 
     resHeaders.ETag = `${entry.seq}`
+    resHeaders['Content-Length'] = `${entry.value.blob.byteLength}`
 
     const contentType = getMimeType(path)
     resHeaders[HEADER_CONTENT_TYPE] = contentType
-
 
     if (entry?.value?.metadata?.mtime) {
       const date = new Date(entry.value.metadata.mtime)

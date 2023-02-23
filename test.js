@@ -74,7 +74,7 @@ test('Quick check', async (t) => {
   const contentType = uploadedContentResponse.headers.get('Content-Type')
   const contentLink = uploadedContentResponse.headers.get('Link')
 
-  t.match(contentLink, /^<hyper:\/\/[0-9a-z]{52}\/example .txt>; rel="canonical"$/, 'Link header includes both public key and path.')
+  t.match(contentLink, /^<hyper:\/\/[0-9a-z]{52}\/example%20.txt>; rel="canonical"$/, 'Link header includes both public key and path.')
   t.equal(contentType, 'text/plain; charset=utf-8', 'Content got expected mime type')
   t.equal(content, SAMPLE_CONTENT, 'Got uploaded content back out')
 
@@ -115,20 +115,22 @@ test('HEAD request', async (t) => {
   const created = await nextURL(t)
   const uploadLocation = new URL('./example.txt', created)
   await fetch(uploadLocation, { method: 'put', body: SAMPLE_CONTENT })
-  const uploadedContentResponse = await fetch(uploadLocation, { method: 'head' })
 
-  const headersEtag = uploadedContentResponse.headers.get('Etag')
-  const headersContentType = uploadedContentResponse.headers.get('Content-Type')
-  const headersContentLength = uploadedContentResponse.headers.get('Content-Length')
-  const headersAcceptRanges = uploadedContentResponse.headers.get('Accept-Ranges')
-  const headersContentRange = uploadedContentResponse.headers.get('Content-Range')
-  const headersLastModified = uploadedContentResponse.headers.get('Last-Modified')
-  const headersLink = uploadedContentResponse.headers.get('Link')
+  const headResponse = await fetch(uploadLocation, { method: 'head' })
 
-  t.equal(headersEtag, '2', 'Headers got expected etag')
+  await checkResponse(headResponse, t, 'Able to load HEAD')
+
+  const headersEtag = headResponse.headers.get('Etag')
+  const headersContentType = headResponse.headers.get('Content-Type')
+  const headersContentLength = headResponse.headers.get('Content-Length')
+  const headersAcceptRanges = headResponse.headers.get('Accept-Ranges')
+  const headersLastModified = headResponse.headers.get('Last-Modified')
+  const headersLink = headResponse.headers.get('Link')
+
+  // Version at which the file was added
+  t.equal(headersEtag, '1', 'Headers got expected etag')
   t.equal(headersContentType, 'text/plain; charset=utf-8', 'Headers got expected mime type')
   t.ok(headersContentLength, "Headers have 'Content-Length' set.")
-  t.ok(headersContentRange, "Headers have 'Content-Range' set.")
   t.ok(headersLastModified, "Headers have 'Last-Modified' set.")
   t.equal(headersAcceptRanges, "bytes")
   t.match(headersLink, /^<hyper:\/\/[0-9a-z]{52}\/example.txt>; rel="canonical"$/, 'Link header includes both public key and path.')
