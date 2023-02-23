@@ -209,7 +209,8 @@ export default async function makeHyperFetch ({
       }
     })
     router.get(`hyper://*/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/*`, async function listenExtension (request) {
-      const { hostname, pathname } = new URL(request.url)
+      const { hostname, pathname: rawPathname } = new URL(request.url)
+      const pathname = decodeURI(rawPathname)
       const name = pathname.slice(`/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/`.length)
 
       const core = await getCore(`hyper://${hostname}/`)
@@ -229,7 +230,9 @@ export default async function makeHyperFetch ({
       }
     })
     router.post(`hyper://*/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/*`, async function broadcastExtension (request) {
-      const { hostname, pathname } = new URL(request.url)
+      const { hostname, pathname: rawPathname } = new URL(request.url)
+      const pathname = decodeURI(rawPathname)
+
       const name = pathname.slice(`/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/`.length)
 
       const core = await getCore(`hyper://${hostname}/`)
@@ -241,7 +244,9 @@ export default async function makeHyperFetch ({
       return { status: 200 }
     })
     router.post(`hyper://*/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/*/*`, async function extensionToPeer (request) {
-      const { hostname, pathname } = new URL(request.url)
+      const { hostname, pathname: rawPathname } = new URL(request.url)
+      const pathname = decodeURI(rawPathname)
+
       const subFolder = pathname.slice(`/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/`.length)
       const [name, extensionPeer] = subFolder.split('/')
 
@@ -304,7 +309,8 @@ export default async function makeHyperFetch ({
     })
 
     router.put('hyper://*/**', async function putFiles (request) {
-      const { hostname, pathname } = new URL(request.url)
+      const { hostname, pathname: rawPathname } = new URL(request.url)
+      const pathname = decodeURI(rawPathname)
       const contentType = request.headers.get('Content-Type') || ''
       const isFormData = contentType.includes('multipart/form-data')
 
@@ -339,7 +345,8 @@ export default async function makeHyperFetch ({
       return { status: 201, headers: { Location: request.url } }
     })
     router.delete('hyper://*/**', async function putFiles (request) {
-      const { hostname, pathname } = new URL(request.url)
+      const { hostname, pathname: rawPathname } = new URL(request.url)
+      const pathname = decodeURI(rawPathname)
 
       const drive = await getDrive(`hyper://${hostname}`)
 
@@ -368,7 +375,9 @@ export default async function makeHyperFetch ({
 
   router.head('hyper://*/**', async function headFiles (request) {
     const url = new URL(request.url)
-    const { hostname, pathname, searchParams } = url
+    const { hostname, pathname: rawPathname, searchParams } = url
+    const pathname = decodeURI(rawPathname)
+
     const accept = request.headers.get('Accept') || ''
     const isRanged = request.headers.get('Range') || ''
     const noResolve = searchParams.has('noResolve')
@@ -474,7 +483,9 @@ export default async function makeHyperFetch ({
   // TODO: Redirect on directories without trailing slash
   router.get('hyper://*/**', async function getFiles (request) {
     const url = new URL(request.url)
-    const { hostname, pathname, searchParams } = url
+    const { hostname, pathname: rawPathname, searchParams } = url
+    const pathname = decodeURI(rawPathname)
+
     const accept = request.headers.get('Accept') || ''
     const noResolve = searchParams.has('noResolve')
     const isDirectory = pathname.endsWith('/')
@@ -555,7 +566,6 @@ async function serveFile (headers, drive, pathname) {
     'Accept-Ranges': 'bytes',
     Link: `<${fullURL}>; rel="canonical"`
   }
-
 
   if (entry?.value?.metadata?.mtime) {
     const date = new Date(entry.value.metadata.mtime)

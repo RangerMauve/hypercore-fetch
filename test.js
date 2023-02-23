@@ -82,7 +82,7 @@ test('Quick check', async (t) => {
 
   await checkResponse(dirResponse, t)
 
-  t.deepEqual(await dirResponse.json(), ['example.txt'], 'File got added')
+  t.deepEqual(await dirResponse.json(), ['example .txt'], 'File got added')
 })
 
 test('GET full url for created keys', async (t) => {
@@ -132,7 +132,7 @@ test('HEAD request', async (t) => {
   t.equal(headersContentType, 'text/plain; charset=utf-8', 'Headers got expected mime type')
   t.ok(headersContentLength, "Headers have 'Content-Length' set.")
   t.ok(headersLastModified, "Headers have 'Last-Modified' set.")
-  t.equal(headersAcceptRanges, "bytes")
+  t.equal(headersAcceptRanges, 'bytes')
   t.match(headersLink, /^<hyper:\/\/[0-9a-z]{52}\/example.txt>; rel="canonical"$/, 'Link header includes both public key and path.')
 })
 
