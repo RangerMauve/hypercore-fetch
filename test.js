@@ -186,6 +186,12 @@ test('PUT FormData', async (t) => {
   await checkResponse(listDirRequest, t)
   const entries = await listDirRequest.json()
   t.deepEqual(entries, ['example.txt', 'example2.txt'], 'new files are listed')
+
+  const headResponse = await fetch(created, { method: 'head' })
+  await checkResponse(headResponse, t)
+  const etag = headResponse.headers.get('Etag')
+
+  t.equal(etag, 2, 'Both files uploaded in one atomic commit.')
 })
 test('PUT into new directory', async (t) => {
   const created = await nextURL(t)
