@@ -280,7 +280,7 @@ export default async function makeHyperFetch ({
       try {
         const drive = await getDriveFromKey(key, true)
 
-        return { body: drive.core.url }
+        return { body: drive.url }
       } catch (e) {
         if (e.message === ERROR_KEY_NOT_CREATED) {
           return {
@@ -305,7 +305,7 @@ export default async function makeHyperFetch ({
 
       const drive = await getDriveFromKey(key, false)
 
-      return { body: drive.core.url }
+      return { body: drive.url }
     })
 
     router.put('hyper://*/**', async function putFiles (request) {
@@ -384,7 +384,7 @@ export default async function makeHyperFetch ({
     const isDirectory = pathname.endsWith('/')
 
     const drive = await getDrive(`hyper://${hostname}`)
-    const fullURL = new URL(pathname, drive.core.url).href
+    const fullURL = new URL(pathname, drive.url).href
 
     const resHeaders = {
       ETag: `${drive.version}`,
@@ -491,7 +491,7 @@ export default async function makeHyperFetch ({
     const isDirectory = pathname.endsWith('/')
 
     const drive = await getDrive(`hyper://${hostname}`)
-    const fullURL = new URL(pathname, drive.core.url).href
+    const fullURL = new URL(pathname, drive.url).href
 
     if (isDirectory) {
       const resHeaders = {
@@ -556,7 +556,7 @@ async function serveFile (headers, drive, pathname) {
   const isRanged = headers.get('Range') || ''
   const contentType = getMimeType(pathname)
 
-  const fullURL = new URL(pathname, drive.core.url).href
+  const fullURL = new URL(pathname, drive.url).href
 
   const entry = await drive.entry(pathname)
 
