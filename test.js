@@ -446,6 +446,14 @@ test('EventSource extension messages', async (t) => {
   t.ok(lastEventId, 'Event contained peer ID')
 })
 
+test('Resolve DNS', async (t) => {
+  const loadResponse = await fetch('hyper://example2.mauve.moe/')
+
+  const entries = await loadResponse.json()
+
+  t.pass('Loaded contents and ')
+})
+
 async function checkResponse (response, t, successMessage = 'Response OK') {
   if (!response.ok) {
     const message = await response.text()
