@@ -454,6 +454,18 @@ test('Resolve DNS', async (t) => {
   t.pass('Loaded contents and ')
 })
 
+test('Error on invalid hostname', async (t) => {
+  const loadResponse = await fetch('hyper://example/')
+
+  console.log(loadResponse.status)
+
+  if(loadResponse.ok) {
+    throw new Error('Loading without DNS or a public key should have failed')
+  } else {
+    t.pass("Invalid names led to an error")
+  }
+})
+
 async function checkResponse (response, t, successMessage = 'Response OK') {
   if (!response.ok) {
     const message = await response.text()
