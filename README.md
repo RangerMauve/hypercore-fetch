@@ -48,6 +48,8 @@ Each response will contain a header for the canonical URL represented as a `Link
 
 There is also an `ETag` header which will be a JSON string containging the drive's current `version`, or the file's sequence number.
 This will change only when the drive has gotten an update of some sort and is monotonically incrementing.
+The `ETag` representing a file's sequence number represents the version the Hyperdrive was at when the file was added.
+Thus you can get the previous version of a file by using `hyper://NAME/$/version/${ETAG}/example.txt`.
 
 If the resource is a file, it may contain the `Last-Modified` header if the file has had a `metadata.mtime` flag set upon update.
 
@@ -188,3 +190,13 @@ The `body` of the request will be used as the payload.
 Please note that only utf8 encoded text is currently supported due to limitations of the event-stream encoding.
 
 Note that this requires the `extensionMessages: true` flag.
+
+### `fetch('hyper://NAME/$/version/VERSION_NUMBER/example.txt')`
+
+You can get older views of data in an archive by using the special `/$/version` folder with a version number to view older states.
+
+`VERSION_NUMBER` should be a number representing the version to check out based on the `ETag` of the root of the archive.
+
+From there, you can use `GET` and `HEAD` requests with allt he same headers and querystring paramters as non-versioned paths to data.
+
+Note that you cannot `PUT` or `DELETE` data in a versioned folder.
