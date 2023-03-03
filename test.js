@@ -447,30 +447,57 @@ test('EventSource extension messages', async (t) => {
 })
 
 test('Resolve DNS', async (t) => {
-  const loadResponse = await fetch('hyper://example2.mauve.moe/')
+  const loadResponse = await fetch('hyper://example2.mauve.moe/?noResolve')
 
   const entries = await loadResponse.json()
 
-  t.pass('Loaded contents and ')
+  t.ok(entries.length, 'Loaded contents with some files present')
 })
 
 test('Error on invalid hostname', async (t) => {
   const loadResponse = await fetch('hyper://example/')
 
-  console.log(loadResponse.status)
-
-  if(loadResponse.ok) {
+  if (loadResponse.ok) {
     throw new Error('Loading without DNS or a public key should have failed')
   } else {
-    t.pass("Invalid names led to an error")
+    t.pass('Invalid names led to an error')
   }
+})
+
+test('GET older version of file from VERSION folder', async (t) => {
+  const created = await nextURL(t)
+
+  const fileName = 'example.txt'
+
+  const data1 = 'Hello World'
+  const data2 = 'Goodbye World'
+
+  const fileURL = new URL(`/${fileName}`, created)
+  const versionFileURL = new URL(`/$/version/2/${fileName}`, created)
+
+  await checkResponse(
+    await fetch(fileURL, { method: 'PUT', body: data1 }), t
+  )
+  await checkResponse(
+    await fetch(fileURL, { method: 'PUT', body: data2 }), t
+  )
+
+  const versionedResponse = await fetch(versionFileURL)
+
+  await checkResponse(versionedResponse, t, 'Able to GET versioned file')
+
+  const versionedData = await versionedResponse.text()
+
+  t.equal(versionedData, data1, 'Old data got loaded')
 })
 
 async function checkResponse (response, t, successMessage = 'Response OK') {
   if (!response.ok) {
     const message = await response.text()
     t.fail(new Error(`HTTP Error ${response.status}:\n${message}`))
+    return false
   } else {
     t.pass(successMessage)
+    return true
   }
 }

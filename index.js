@@ -13,6 +13,7 @@ const SPECIAL_DOMAIN = 'localhost'
 const SPECIAL_FOLDER = '$'
 const EXTENSIONS_FOLDER_NAME = 'extensions'
 const EXTENSION_EVENT = 'extension-message'
+const VERSION_FOLDER_NAME = 'version'
 const PEER_OPEN = 'peer-open'
 const PEER_REMOVE = 'peer-remove'
 
@@ -53,6 +54,26 @@ export default async function makeHyperFetch ({
   const drives = new Map()
   const extensions = new Map()
   const cores = new Map()
+
+  if (extensionMessages) {
+    router.get(`hyper://*/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/`, listExtensions)
+    router.get(`hyper://*/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/*`, listenExtension)
+    router.post(`hyper://*/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/*`, broadcastExtension)
+    router.post(`hyper://*/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/*/*`, extensionToPeer)
+  }
+
+  if (writable) {
+    router.get(`hyper://${SPECIAL_DOMAIN}/`, getKey)
+    router.post(`hyper://${SPECIAL_DOMAIN}/`, createKey)
+
+    router.put('hyper://*/**', putFiles)
+    router.delete('hyper://*/**', deleteFiles)
+  }
+
+  router.head(`hyper://*/${SPECIAL_FOLDER}/${VERSION_FOLDER_NAME}/**`, headFilesVersioned)
+  router.get(`hyper://*/${SPECIAL_FOLDER}/${VERSION_FOLDER_NAME}/**`, getFilesVersioned)
+  router.get('hyper://*/**', getFiles)
+  router.head('hyper://*/**', headFiles)
 
   async function getCore (hostname) {
     if (cores.has(hostname)) {
@@ -155,225 +176,226 @@ export default async function makeHyperFetch ({
     return [...core.extensions.keys()]
   }
 
-  if (extensionMessages) {
-    router.get(`hyper://*/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/`, async function listExtensions (request) {
-      const { hostname } = new URL(request.url)
-      const accept = request.headers.get('Accept') || ''
+  async function listExtensions (request) {
+    const { hostname } = new URL(request.url)
+    const accept = request.headers.get('Accept') || ''
 
-      const core = await getCore(`hyper://${hostname}/`)
+    const core = await getCore(`hyper://${hostname}/`)
 
-      if (accept.includes('text/event-stream')) {
-        const events = new EventIterator(({ push }) => {
-          function onMessage (name, content, peer) {
-            const id = peer.remotePublicKey.toString('hex')
-            // TODO: Fancy verification on the `name`?
-            // Send each line of content separately on a `data` line
-            const data = content.split('\n').map((line) => `data:${line}\n`).join('')
+    if (accept.includes('text/event-stream')) {
+      const events = new EventIterator(({ push }) => {
+        function onMessage (name, content, peer) {
+          const id = peer.remotePublicKey.toString('hex')
+          // TODO: Fancy verification on the `name`?
+          // Send each line of content separately on a `data` line
+          const data = content.split('\n').map((line) => `data:${line}\n`).join('')
 
-            push(`id:${id}\nevent:${name}\n${data}\n`)
-          }
-          function onPeerOpen (peer) {
-            const id = peer.remotePublicKey.toString('hex')
-            push(`id:${id}\nevent:${PEER_OPEN}\n\n`)
-          }
-          function onPeerRemove (peer) {
-            // Whatever, probably an uninitialized peer
-            if (!peer.remotePublicKey) return
-            const id = peer.remotePublicKey.toString('hex')
-            push(`id:${id}\nevent:${PEER_REMOVE}\n\n`)
-          }
-          core.on(EXTENSION_EVENT, onMessage)
-          core.on(PEER_OPEN, onPeerOpen)
-          core.on(PEER_REMOVE, onPeerRemove)
-          return () => {
-            core.removeListener(EXTENSION_EVENT, onMessage)
-            core.removeListener(PEER_OPEN, onPeerOpen)
-            core.removeListener(PEER_REMOVE, onPeerRemove)
-          }
-        })
-
-        return {
-          statusCode: 200,
-          headers: {
-            [HEADER_CONTENT_TYPE]: MIME_EVENT_STREAM
-          },
-          body: events
+          push(`id:${id}\nevent:${name}\n${data}\n`)
         }
-      }
-
-      const extensions = listExtensionNames(core)
-      return {
-        status: 200,
-        headers: { [HEADER_CONTENT_TYPE]: MIME_APPLICATION_JSON },
-        body: JSON.stringify(extensions, null, '\t')
-      }
-    })
-    router.get(`hyper://*/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/*`, async function listenExtension (request) {
-      const { hostname, pathname: rawPathname } = new URL(request.url)
-      const pathname = decodeURI(rawPathname)
-      const name = pathname.slice(`/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/`.length)
-
-      const core = await getCore(`hyper://${hostname}/`)
-
-      await getExtension(core, name)
-
-      const peers = await getExtensionPeers(core, name)
-      const finalPeers = formatPeers(peers)
-      const body = JSON.stringify(finalPeers, null, '\t')
+        function onPeerOpen (peer) {
+          const id = peer.remotePublicKey.toString('hex')
+          push(`id:${id}\nevent:${PEER_OPEN}\n\n`)
+        }
+        function onPeerRemove (peer) {
+          // Whatever, probably an uninitialized peer
+          if (!peer.remotePublicKey) return
+          const id = peer.remotePublicKey.toString('hex')
+          push(`id:${id}\nevent:${PEER_REMOVE}\n\n`)
+        }
+        core.on(EXTENSION_EVENT, onMessage)
+        core.on(PEER_OPEN, onPeerOpen)
+        core.on(PEER_REMOVE, onPeerRemove)
+        return () => {
+          core.removeListener(EXTENSION_EVENT, onMessage)
+          core.removeListener(PEER_OPEN, onPeerOpen)
+          core.removeListener(PEER_REMOVE, onPeerRemove)
+        }
+      })
 
       return {
-        status: 200,
-        body,
+        statusCode: 200,
         headers: {
-          [HEADER_CONTENT_TYPE]: MIME_APPLICATION_JSON
-        }
+          [HEADER_CONTENT_TYPE]: MIME_EVENT_STREAM
+        },
+        body: events
       }
-    })
-    router.post(`hyper://*/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/*`, async function broadcastExtension (request) {
-      const { hostname, pathname: rawPathname } = new URL(request.url)
-      const pathname = decodeURI(rawPathname)
+    }
 
-      const name = pathname.slice(`/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/`.length)
-
-      const core = await getCore(`hyper://${hostname}/`)
-
-      const extension = await getExtension(core, name)
-      const data = await request.text()
-      extension.broadcast(data)
-
-      return { status: 200 }
-    })
-    router.post(`hyper://*/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/*/*`, async function extensionToPeer (request) {
-      const { hostname, pathname: rawPathname } = new URL(request.url)
-      const pathname = decodeURI(rawPathname)
-
-      const subFolder = pathname.slice(`/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/`.length)
-      const [name, extensionPeer] = subFolder.split('/')
-
-      const core = await getCore(`hyper://${hostname}/`)
-
-      const extension = await getExtension(core, name)
-      const peers = await getExtensionPeers(core, name)
-      const peer = peers.find(({ remotePublicKey }) => remotePublicKey.toString('hex') === extensionPeer)
-      if (!peer) {
-        return {
-          status: 404,
-          headers: {
-            [HEADER_CONTENT_TYPE]: MIME_TEXT_PLAIN
-          },
-          body: 'Peer Not Found'
-        }
-      }
-      const data = await request.arrayBuffer()
-      extension.send(data, peer)
-      return { status: 200 }
-    })
+    const extensions = listExtensionNames(core)
+    return {
+      status: 200,
+      headers: { [HEADER_CONTENT_TYPE]: MIME_APPLICATION_JSON },
+      body: JSON.stringify(extensions, null, '\t')
+    }
   }
 
-  if (writable) {
-    router.get(`hyper://${SPECIAL_DOMAIN}/`, async function getKey (request) {
-      const key = new URL(request.url).searchParams.get('key')
-      if (!key) {
-        return { status: 400, body: 'Must specify key parameter to resolve' }
+  async function listenExtension (request) {
+    const { hostname, pathname: rawPathname } = new URL(request.url)
+    const pathname = decodeURI(rawPathname)
+    const name = pathname.slice(`/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/`.length)
+
+    const core = await getCore(`hyper://${hostname}/`)
+
+    await getExtension(core, name)
+
+    const peers = await getExtensionPeers(core, name)
+    const finalPeers = formatPeers(peers)
+    const body = JSON.stringify(finalPeers, null, '\t')
+
+    return {
+      status: 200,
+      body,
+      headers: {
+        [HEADER_CONTENT_TYPE]: MIME_APPLICATION_JSON
       }
+    }
+  }
 
-      try {
-        const drive = await getDriveFromKey(key, true)
+  async function broadcastExtension (request) {
+    const { hostname, pathname: rawPathname } = new URL(request.url)
+    const pathname = decodeURI(rawPathname)
 
-        return { body: drive.url }
-      } catch (e) {
-        if (e.message === ERROR_KEY_NOT_CREATED) {
-          return {
-            status: 400,
-            body: e.message,
-            headers: {
-              [HEADER_CONTENT_TYPE]: MIME_TEXT_PLAIN
-            }
-          }
-        } else throw e
+    const name = pathname.slice(`/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/`.length)
+
+    const core = await getCore(`hyper://${hostname}/`)
+
+    const extension = await getExtension(core, name)
+    const data = await request.text()
+    extension.broadcast(data)
+
+    return { status: 200 }
+  }
+
+  async function extensionToPeer (request) {
+    const { hostname, pathname: rawPathname } = new URL(request.url)
+    const pathname = decodeURI(rawPathname)
+
+    const subFolder = pathname.slice(`/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/`.length)
+    const [name, extensionPeer] = subFolder.split('/')
+
+    const core = await getCore(`hyper://${hostname}/`)
+
+    const extension = await getExtension(core, name)
+    const peers = await getExtensionPeers(core, name)
+    const peer = peers.find(({ remotePublicKey }) => remotePublicKey.toString('hex') === extensionPeer)
+    if (!peer) {
+      return {
+        status: 404,
+        headers: {
+          [HEADER_CONTENT_TYPE]: MIME_TEXT_PLAIN
+        },
+        body: 'Peer Not Found'
       }
-    })
-    router.post(`hyper://${SPECIAL_DOMAIN}/`, async function createKey (request) {
-      // TODO: Allow importing secret keys here
-      // Maybe specify a seed to use for generating the blobs?
-      // Else we'd need to specify the blobs keys and metadata keys
+    }
+    const data = await request.arrayBuffer()
+    extension.send(data, peer)
+    return { status: 200 }
+  }
 
-      const key = new URL(request.url).searchParams.get('key')
-      if (!key) {
-        return { status: 400, body: 'Must specify key parameter to resolve' }
-      }
+  async function getKey (request) {
+    const key = new URL(request.url).searchParams.get('key')
+    if (!key) {
+      return { status: 400, body: 'Must specify key parameter to resolve' }
+    }
 
-      const drive = await getDriveFromKey(key, false)
+    try {
+      const drive = await getDriveFromKey(key, true)
 
       return { body: drive.url }
-    })
-
-    router.put('hyper://*/**', async function putFiles (request) {
-      const { hostname, pathname: rawPathname } = new URL(request.url)
-      const pathname = decodeURI(rawPathname)
-      const contentType = request.headers.get('Content-Type') || ''
-      const isFormData = contentType.includes('multipart/form-data')
-
-      const drive = await getDrive(`hyper://${hostname}`)
-
-      if (isFormData) {
-        // It's a form! Get the files out and process them
-        const formData = await request.formData()
-        for (const [name, data] of formData) {
-          if (name !== 'file') continue
-          const filePath = posix.join(pathname, data.name)
-          await pipelinePromise(
-            Readable.from(data.stream()),
-            drive.createWriteStream(filePath, {
-              metadata: {
-                mtime: Date.now()
-              }
-            })
-          )
+    } catch (e) {
+      if (e.message === ERROR_KEY_NOT_CREATED) {
+        return {
+          status: 400,
+          body: e.message,
+          headers: {
+            [HEADER_CONTENT_TYPE]: MIME_TEXT_PLAIN
+          }
         }
-      } else {
+      } else throw e
+    }
+  }
+
+  async function createKey (request) {
+    // TODO: Allow importing secret keys here
+    // Maybe specify a seed to use for generating the blobs?
+    // Else we'd need to specify the blobs keys and metadata keys
+
+    const key = new URL(request.url).searchParams.get('key')
+    if (!key) {
+      return { status: 400, body: 'Must specify key parameter to resolve' }
+    }
+
+    const drive = await getDriveFromKey(key, false)
+
+    return { body: drive.url }
+  }
+
+  async function putFiles (request) {
+    const { hostname, pathname: rawPathname } = new URL(request.url)
+    const pathname = decodeURI(rawPathname)
+    const contentType = request.headers.get('Content-Type') || ''
+    const isFormData = contentType.includes('multipart/form-data')
+
+    const drive = await getDrive(`hyper://${hostname}`)
+
+    if (isFormData) {
+      // It's a form! Get the files out and process them
+      const formData = await request.formData()
+      for (const [name, data] of formData) {
+        if (name !== 'file') continue
+        const filePath = posix.join(pathname, data.name)
         await pipelinePromise(
-          Readable.from(request.body),
-          drive.createWriteStream(pathname, {
+          Readable.from(data.stream()),
+          drive.createWriteStream(filePath, {
             metadata: {
               mtime: Date.now()
             }
           })
         )
       }
+    } else {
+      await pipelinePromise(
+        Readable.from(request.body),
+        drive.createWriteStream(pathname, {
+          metadata: {
+            mtime: Date.now()
+          }
+        })
+      )
+    }
 
-      return { status: 201, headers: { Location: request.url } }
-    })
-    router.delete('hyper://*/**', async function putFiles (request) {
-      const { hostname, pathname: rawPathname } = new URL(request.url)
-      const pathname = decodeURI(rawPathname)
-
-      const drive = await getDrive(`hyper://${hostname}`)
-
-      if (pathname.endsWith('/')) {
-        let didDelete = false
-        for await (const entry of drive.list(pathname)) {
-          await drive.del(entry.key)
-          didDelete = true
-        }
-        if (!didDelete) {
-          return { status: 404, body: 'Not Found', headers: { [HEADER_CONTENT_TYPE]: MIME_TEXT_PLAIN } }
-        }
-        return { status: 200 }
-      }
-
-      const entry = await drive.entry(pathname)
-
-      if (!entry) {
-        return { status: 404, body: 'Not Found', headers: { [HEADER_CONTENT_TYPE]: MIME_TEXT_PLAIN } }
-      }
-      await drive.del(pathname)
-
-      return { status: 200 }
-    })
+    return { status: 201, headers: { Location: request.url } }
   }
 
-  router.head('hyper://*/**', async function headFiles (request) {
+  async function deleteFiles (request) {
+    const { hostname, pathname: rawPathname } = new URL(request.url)
+    const pathname = decodeURI(rawPathname)
+
+    const drive = await getDrive(`hyper://${hostname}`)
+
+    if (pathname.endsWith('/')) {
+      let didDelete = false
+      for await (const entry of drive.list(pathname)) {
+        await drive.del(entry.key)
+        didDelete = true
+      }
+      if (!didDelete) {
+        return { status: 404, body: 'Not Found', headers: { [HEADER_CONTENT_TYPE]: MIME_TEXT_PLAIN } }
+      }
+      return { status: 200 }
+    }
+
+    const entry = await drive.entry(pathname)
+
+    if (!entry) {
+      return { status: 404, body: 'Not Found', headers: { [HEADER_CONTENT_TYPE]: MIME_TEXT_PLAIN } }
+    }
+    await drive.del(pathname)
+
+    return { status: 200 }
+  }
+
+  async function headFilesVersioned (request) {
     const url = new URL(request.url)
     const { hostname, pathname: rawPathname, searchParams } = url
     const pathname = decodeURI(rawPathname)
@@ -381,9 +403,34 @@ export default async function makeHyperFetch ({
     const accept = request.headers.get('Accept') || ''
     const isRanged = request.headers.get('Range') || ''
     const noResolve = searchParams.has('noResolve')
-    const isDirectory = pathname.endsWith('/')
+
+    const parts = pathname.split('/')
+    const version = parts[3]
+    const realPath = parts.slice(4).join('/')
 
     const drive = await getDrive(`hyper://${hostname}`)
+
+    const snapshot = await drive.checkout(version)
+
+    return serveHead(snapshot, realPath, { accept, isRanged, noResolve })
+  }
+
+  async function headFiles (request) {
+    const url = new URL(request.url)
+    const { hostname, pathname: rawPathname, searchParams } = url
+    const pathname = decodeURI(rawPathname)
+
+    const accept = request.headers.get('Accept') || ''
+    const isRanged = request.headers.get('Range') || ''
+    const noResolve = searchParams.has('noResolve')
+
+    const drive = await getDrive(`hyper://${hostname}`)
+
+    return serveHead(drive, pathname, { accept, isRanged, noResolve })
+  }
+
+  async function serveHead (drive, pathname, { accept, isRanged, noResolve }) {
+    const isDirectory = pathname.endsWith('/')
     const fullURL = new URL(pathname, drive.url).href
 
     const resHeaders = {
@@ -478,19 +525,45 @@ export default async function makeHyperFetch ({
       status: 200,
       headers: resHeaders
     }
-  })
+  }
 
-  // TODO: Redirect on directories without trailing slash
-  router.get('hyper://*/**', async function getFiles (request) {
+  async function getFilesVersioned (request) {
     const url = new URL(request.url)
     const { hostname, pathname: rawPathname, searchParams } = url
     const pathname = decodeURI(rawPathname)
 
     const accept = request.headers.get('Accept') || ''
+    const isRanged = request.headers.get('Range') || ''
     const noResolve = searchParams.has('noResolve')
-    const isDirectory = pathname.endsWith('/')
+
+    const parts = pathname.split('/')
+    const version = parts[3]
+    const realPath = parts.slice(4).join('/')
 
     const drive = await getDrive(`hyper://${hostname}`)
+
+    const snapshot = await drive.checkout(version)
+
+    return serveGet(snapshot, realPath, { accept, isRanged, noResolve })
+  }
+
+  // TODO: Redirect on directories without trailing slash
+  async function getFiles (request) {
+    const url = new URL(request.url)
+    const { hostname, pathname: rawPathname, searchParams } = url
+    const pathname = decodeURI(rawPathname)
+
+    const accept = request.headers.get('Accept') || ''
+    const isRanged = request.headers.get('Range') || ''
+    const noResolve = searchParams.has('noResolve')
+
+    const drive = await getDrive(`hyper://${hostname}`)
+
+    return serveGet(drive, pathname, { accept, isRanged, noResolve })
+  }
+
+  async function serveGet (drive, pathname, { accept, isRanged, noResolve }) {
+    const isDirectory = pathname.endsWith('/')
     const fullURL = new URL(pathname, drive.url).href
 
     if (isDirectory) {
@@ -514,12 +587,12 @@ export default async function makeHyperFetch ({
 
       if (!noResolve) {
         if (entries.includes('index.html')) {
-          return serveFile(request.headers, drive, posix.join(pathname, 'index.html'))
+          return serveFile(drive, posix.join(pathname, 'index.html'), isRanged)
         }
       }
 
       if (accept.includes('text/html')) {
-        const body = await renderIndex(url, entries, fetch)
+        const body = await renderIndex(new URL(fullURL), entries, fetch)
         return {
           status: 200,
           body,
@@ -546,14 +619,13 @@ export default async function makeHyperFetch ({
       return { status: 404, body: 'Not Found' }
     }
 
-    return serveFile(request.headers, drive, path)
-  })
+    return serveFile(drive, path, isRanged)
+  }
 
   return fetch
 }
 
-async function serveFile (headers, drive, pathname) {
-  const isRanged = headers.get('Range') || ''
+async function serveFile (drive, pathname, isRanged) {
   const contentType = getMimeType(pathname)
 
   const fullURL = new URL(pathname, drive.url).href
