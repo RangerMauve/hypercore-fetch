@@ -57,7 +57,10 @@ test('Quick check', async (t) => {
 
   t.deepEqual(await existsResponse.json(), [], 'Empty dir on create')
 
-  const uploadLocation = new URL('./example .txt', created)
+  // Search query gets cut off, leaving just 'example'
+  const uploadLocation = new URL('./example? .txt', created)
+  // This obviously doesn't work either
+  // const uploadLocation = new URL('./example%3F .txt', created)
 
   const uploadResponse = await fetch(uploadLocation, {
     method: 'put',
@@ -74,7 +77,7 @@ test('Quick check', async (t) => {
   const contentType = uploadedContentResponse.headers.get('Content-Type')
   const contentLink = uploadedContentResponse.headers.get('Link')
 
-  t.match(contentLink, /^<hyper:\/\/[0-9a-z]{52}\/example%20.txt>; rel="canonical"$/, 'Link header includes both public key and path.')
+  t.match(contentLink, /^<hyper:\/\/[0-9a-z]{52}\/example%3F%20.txt>; rel="canonical"$/, 'Link header includes both public key and path.')
   t.equal(contentType, 'text/plain; charset=utf-8', 'Content got expected mime type')
   t.equal(content, SAMPLE_CONTENT, 'Got uploaded content back out')
 
@@ -82,7 +85,7 @@ test('Quick check', async (t) => {
 
   await checkResponse(dirResponse, t)
 
-  t.deepEqual(await dirResponse.json(), ['example .txt'], 'File got added')
+  t.deepEqual(await dirResponse.json(), ['example? .txt'], 'File got added')
 })
 
 test('GET full url for created keys', async (t) => {
