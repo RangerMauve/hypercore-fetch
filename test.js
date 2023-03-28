@@ -333,6 +333,26 @@ test('Ignore index.html with noResolve', async (t) => {
   const entries = await listDirRequest.json()
   t.deepEqual(entries, ['index.html'], 'able to list index.html')
 })
+test('Render index.gmi', async (t) => {
+  const created = await nextURL(t)
+  const uploadLocation = new URL('./index.gmi', created)
+
+  const uploadResponse = await fetch(uploadLocation, {
+    method: 'put',
+    body: SAMPLE_CONTENT
+  })
+  await checkResponse(uploadResponse, t)
+
+  const uploadedContentResponse = await fetch(created)
+
+  await checkResponse(uploadedContentResponse, t)
+
+  const content = await uploadedContentResponse.text()
+  const contentType = uploadedContentResponse.headers.get('Content-Type')
+
+  t.equal(contentType, 'text/gemini; charset=utf-8', 'got HTML mime type')
+  t.equal(content, SAMPLE_CONTENT, 'loaded index.html content')
+})
 test('Read directory as HTML', async (t) => {
   const created = await nextURL(t)
 

@@ -604,7 +604,7 @@ export default async function makeHyperFetch ({
       if (!noResolve) {
         for (const indexFile of INDEX_FILES) {
           if (entries.includes(indexFile)) {
-            return serveFile(drive, posix.join(pathname, 'indexFile'), isRanged)
+            return serveFile(drive, posix.join(pathname, indexFile), isRanged)
           }
         }
       }
