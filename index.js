@@ -27,6 +27,14 @@ const HEADER_LAST_MODIFIED = 'Last-Modified'
 
 export const ERROR_KEY_NOT_CREATED = 'Must create key with POST before reading'
 
+const INDEX_FILES = [
+  'index.html',
+  'index.md',
+  'index.gmi',
+  'index.gemini',
+  'README.md'
+]
+
 async function DEFAULT_RENDER_INDEX (url, files, fetch) {
   return `
 <!DOCTYPE html>
@@ -459,12 +467,15 @@ export default async function makeHyperFetch ({
       }
 
       if (!noResolve) {
-        if (entries.includes('index.html')) {
-          return {
-            status: 204,
-            headers: {
-              ...resHeaders,
-              [HEADER_CONTENT_TYPE]: MIME_TEXT_HTML
+        for (const indexFile of INDEX_FILES) {
+          if (entries.includes(indexFile)) {
+            const mimeType = getMimeType(indexFile)
+            return {
+              status: 204,
+              headers: {
+                ...resHeaders,
+                [HEADER_CONTENT_TYPE]: mimeType
+              }
             }
           }
         }
@@ -591,8 +602,10 @@ export default async function makeHyperFetch ({
       }
 
       if (!noResolve) {
-        if (entries.includes('index.html')) {
-          return serveFile(drive, posix.join(pathname, 'index.html'), isRanged)
+        for (const indexFile of INDEX_FILES) {
+          if (entries.includes(indexFile)) {
+            return serveFile(drive, posix.join(pathname, 'indexFile'), isRanged)
+          }
         }
       }
 
