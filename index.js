@@ -40,6 +40,11 @@ async function DEFAULT_RENDER_INDEX (url, files, fetch) {
 `
 }
 
+// Support gemini files
+mime.define({
+  'text/gemini': ['gmi', 'gemini']
+}, true)
+
 export default async function makeHyperFetch ({
   sdk,
   writable = false,
