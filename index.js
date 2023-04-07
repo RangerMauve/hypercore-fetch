@@ -244,7 +244,7 @@ export default async function makeHyperFetch ({
 
   async function listenExtension (request) {
     const { hostname, pathname: rawPathname } = new URL(request.url)
-    const pathname = decodeURI(rawPathname)
+    const pathname = decodeURI(ensureLeadingSlash(rawPathname))
     const name = pathname.slice(`/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/`.length)
 
     const core = await getCore(`hyper://${hostname}/`)
@@ -266,7 +266,7 @@ export default async function makeHyperFetch ({
 
   async function broadcastExtension (request) {
     const { hostname, pathname: rawPathname } = new URL(request.url)
-    const pathname = decodeURI(rawPathname)
+    const pathname = decodeURI(ensureLeadingSlash(rawPathname))
 
     const name = pathname.slice(`/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/`.length)
 
@@ -281,7 +281,7 @@ export default async function makeHyperFetch ({
 
   async function extensionToPeer (request) {
     const { hostname, pathname: rawPathname } = new URL(request.url)
-    const pathname = decodeURI(rawPathname)
+    const pathname = decodeURI(ensureLeadingSlash(rawPathname))
 
     const subFolder = pathname.slice(`/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/`.length)
     const [name, extensionPeer] = subFolder.split('/')
@@ -345,7 +345,7 @@ export default async function makeHyperFetch ({
 
   async function putFiles (request) {
     const { hostname, pathname: rawPathname } = new URL(request.url)
-    const pathname = decodeURI(rawPathname)
+    const pathname = decodeURI(ensureLeadingSlash(rawPathname))
     const contentType = request.headers.get('Content-Type') || ''
     const isFormData = contentType.includes('multipart/form-data')
 
@@ -382,7 +382,7 @@ export default async function makeHyperFetch ({
 
   async function deleteFiles (request) {
     const { hostname, pathname: rawPathname } = new URL(request.url)
-    const pathname = decodeURI(rawPathname)
+    const pathname = decodeURI(ensureLeadingSlash(rawPathname))
 
     const drive = await getDrive(`hyper://${hostname}`)
 
@@ -411,7 +411,7 @@ export default async function makeHyperFetch ({
   async function headFilesVersioned (request) {
     const url = new URL(request.url)
     const { hostname, pathname: rawPathname, searchParams } = url
-    const pathname = decodeURI(rawPathname)
+    const pathname = decodeURI(ensureLeadingSlash(rawPathname))
 
     const accept = request.headers.get('Accept') || ''
     const isRanged = request.headers.get('Range') || ''
@@ -431,7 +431,7 @@ export default async function makeHyperFetch ({
   async function headFiles (request) {
     const url = new URL(request.url)
     const { hostname, pathname: rawPathname, searchParams } = url
-    const pathname = decodeURI(rawPathname)
+    const pathname = decodeURI(ensureLeadingSlash(rawPathname))
 
     const accept = request.headers.get('Accept') || ''
     const isRanged = request.headers.get('Range') || ''
@@ -546,7 +546,7 @@ export default async function makeHyperFetch ({
   async function getFilesVersioned (request) {
     const url = new URL(request.url)
     const { hostname, pathname: rawPathname, searchParams } = url
-    const pathname = decodeURI(rawPathname)
+    const pathname = decodeURI(ensureLeadingSlash(rawPathname))
 
     const accept = request.headers.get('Accept') || ''
     const isRanged = request.headers.get('Range') || ''
@@ -567,7 +567,7 @@ export default async function makeHyperFetch ({
   async function getFiles (request) {
     const url = new URL(request.url)
     const { hostname, pathname: rawPathname, searchParams } = url
-    const pathname = decodeURI(rawPathname)
+    const pathname = decodeURI(ensureLeadingSlash(rawPathname))
 
     const accept = request.headers.get('Accept') || ''
     const isRanged = request.headers.get('Range') || ''
