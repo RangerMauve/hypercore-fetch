@@ -367,14 +367,18 @@ export default async function makeHyperFetch ({
         )
       }
     } else {
-      await pipelinePromise(
-        Readable.from(request.body),
-        drive.createWriteStream(pathname, {
-          metadata: {
-            mtime: Date.now()
-          }
-        })
-      )
+      if (pathname.endsWith('/')) {
+        return { status: 405, body: 'Cannot PUT file with trailing slash', headers: { Location: request.url } }
+      } else {
+        await pipelinePromise(
+          Readable.from(request.body),
+          drive.createWriteStream(pathname, {
+            metadata: {
+              mtime: Date.now()
+            }
+          })
+        )
+      }
     }
 
     return { status: 201, headers: { Location: request.url } }
