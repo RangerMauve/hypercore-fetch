@@ -749,3 +749,7 @@ function getMimeType (path) {
   if (mimeType.startsWith('text/')) mimeType = `${mimeType}; charset=utf-8`
   return mimeType
 }
+
+function ensureLeadingSlash (path) {
+  return path.startsWith('/') ? path : '/' + path
+}
