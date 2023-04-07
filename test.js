@@ -494,6 +494,7 @@ test('GET older version of file from VERSION folder', async (t) => {
 
   const fileURL = new URL(`/${fileName}`, created)
   const versionFileURL = new URL(`/$/version/2/${fileName}`, created)
+  const versionRootURL = new URL(`/$/version/1/`, created)
 
   await checkResponse(
     await fetch(fileURL, { method: 'PUT', body: data1 }), t
@@ -502,13 +503,15 @@ test('GET older version of file from VERSION folder', async (t) => {
     await fetch(fileURL, { method: 'PUT', body: data2 }), t
   )
 
-  const versionedResponse = await fetch(versionFileURL)
+  const versionedFileResponse = await fetch(versionFileURL)
+  await checkResponse(versionedFileResponse, t, 'Able to GET versioned file')
+  const versionedFileData = await versionedFileResponse.text()
+  t.equal(versionedFileData, data1, 'Old data got loaded')
 
-  await checkResponse(versionedResponse, t, 'Able to GET versioned file')
-
-  const versionedData = await versionedResponse.text()
-
-  t.equal(versionedData, data1, 'Old data got loaded')
+  const versionedRootResponse = await fetch(versionRootURL)
+  await checkResponse(versionedRootResponse, t, 'Able to GET versioned root')
+  const versionedRootContents = await versionedRootResponse.json()
+  t.deepEqual(versionedRootContents, [], 'Old root content got loaded')
 })
 
 async function checkResponse (response, t, successMessage = 'Response OK') {
