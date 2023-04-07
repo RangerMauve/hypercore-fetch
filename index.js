@@ -419,7 +419,7 @@ export default async function makeHyperFetch ({
 
     const parts = pathname.split('/')
     const version = parts[3]
-    const realPath = parts.slice(4).join('/')
+    const realPath = ensureLeadingSlash(parts.slice(4).join('/'))
 
     const drive = await getDrive(`hyper://${hostname}`)
 
@@ -554,7 +554,7 @@ export default async function makeHyperFetch ({
 
     const parts = pathname.split('/')
     const version = parts[3]
-    const realPath = parts.slice(4).join('/')
+    const realPath = ensureLeadingSlash(parts.slice(4).join('/'))
 
     const drive = await getDrive(`hyper://${hostname}`)
 
