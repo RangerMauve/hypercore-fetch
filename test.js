@@ -494,6 +494,7 @@ test('GET older version of file from VERSION folder', async (t) => {
 
   const fileURL = new URL(`/${fileName}`, created)
   const versionFileURL = new URL(`/$/version/2/${fileName}`, created)
+  const versionRootURL = new URL(`/$/version/1/`, created)
 
   await checkResponse(
     await fetch(fileURL, { method: 'PUT', body: data1 }), t
@@ -502,13 +503,66 @@ test('GET older version of file from VERSION folder', async (t) => {
     await fetch(fileURL, { method: 'PUT', body: data2 }), t
   )
 
-  const versionedResponse = await fetch(versionFileURL)
+  const versionedFileResponse = await fetch(versionFileURL)
+  await checkResponse(versionedFileResponse, t, 'Able to GET versioned file')
+  const versionedFileData = await versionedFileResponse.text()
+  t.equal(versionedFileData, data1, 'Old data got loaded')
 
-  await checkResponse(versionedResponse, t, 'Able to GET versioned file')
+  const versionedRootResponse = await fetch(versionRootURL)
+  await checkResponse(versionedRootResponse, t, 'Able to GET versioned root')
+  const versionedRootContents = await versionedRootResponse.json()
+  t.deepEqual(versionedRootContents, [], 'Old root content got loaded')
+})
 
-  const versionedData = await versionedResponse.text()
+test.only('Handle empty string pathname', async (t) => {
+  const created = await nextURL(t)
+  const urlObject = new URL('', created)
+  const urlNoTrailingSlash = urlObject.href.slice(0,-1)
+  const versionedURLObject = new URL(`/$/version/3/`, created)
+  const versionedURLNoTrailingSlash = versionedURLObject.href.slice(0,-1)
 
-  t.equal(versionedData, data1, 'Old data got loaded')
+  // PUT
+  const putResponse = await fetch(urlNoTrailingSlash, { method: 'PUT', body: SAMPLE_CONTENT })
+  if (putResponse.ok) {
+    throw new Error('PUT file at the root directory should have failed')
+  } else {
+    t.pass('PUT file at root directory threw an error')
+  }
+
+  // PUT FormData
+  const formData = new FormData()
+  formData.append('file', new Blob([SAMPLE_CONTENT]), 'example.txt')
+  formData.append('file', new Blob([SAMPLE_CONTENT]), 'example2.txt')
+
+  await checkResponse(
+    await fetch(urlNoTrailingSlash, {
+      method: 'put',
+      body: formData
+    }), t
+  )
+
+  // DELETE
+  await checkResponse(await fetch(urlNoTrailingSlash, { method: 'DELETE' }), t)
+
+  // HEAD
+  const headResponse = await fetch(urlNoTrailingSlash, { method: 'HEAD' })
+  await checkResponse(headResponse, t)
+  t.deepEqual(headResponse.headers.get('Etag'), '5', 'HEAD request returns correct Etag')
+
+  // HEAD (versioned)
+  const versionedHeadResponse = await fetch(versionedURLNoTrailingSlash, { method: 'HEAD' })
+  await checkResponse(versionedHeadResponse, t)
+  t.deepEqual(versionedHeadResponse.headers.get('Etag'), '3', 'Versioned HEAD request returns correct Etag')
+
+  // GET
+  const getResponse = await fetch(urlNoTrailingSlash)
+  await checkResponse(getResponse, t)
+  t.deepEqual(await getResponse.json(), [], 'Returns empty root directory')
+
+  // GET (versioned)
+  const versionedGetResponse = await fetch(versionedURLNoTrailingSlash)
+  await checkResponse(versionedGetResponse, t)
+  t.deepEqual(await versionedGetResponse.json(), ['example.txt', 'example2.txt'], 'Returns root directory prior to DELETE')
 })
 
 async function checkResponse (response, t, successMessage = 'Response OK') {
