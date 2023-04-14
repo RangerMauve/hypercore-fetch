@@ -200,3 +200,8 @@ You can get older views of data in an archive by using the special `/$/version` 
 From there, you can use `GET` and `HEAD` requests with allt he same headers and querystring paramters as non-versioned paths to data.
 
 Note that you cannot `PUT` or `DELETE` data in a versioned folder.
+
+
+## Limitations:
+
+- Since we make use of the special directory `$`, you cannot store files in this folder. If this is a major blocker, feel free to open an issue with alternative folder names we should consider.

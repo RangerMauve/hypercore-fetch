@@ -25,6 +25,16 @@ const MIME_EVENT_STREAM = 'text/event-stream; charset=utf-8'
 const HEADER_CONTENT_TYPE = 'Content-Type'
 const HEADER_LAST_MODIFIED = 'Last-Modified'
 
+const WRITABLE_METHODS = [
+  'PUT',
+  'DELETE'
+]
+
+const BASIC_METHODS = [
+  'HEAD',
+  'GET'
+]
+
 export const ERROR_KEY_NOT_CREATED = 'Must create key with POST before reading'
 
 const INDEX_FILES = [
@@ -450,10 +460,15 @@ export default async function makeHyperFetch ({
     const isDirectory = pathname.endsWith('/')
     const fullURL = new URL(pathname, drive.url).href
 
+    const isWritable = writable && drive.writable
+
+    const Allow = isWritable ? BASIC_METHODS.concat(WRITABLE_METHODS) : BASIC_METHODS
+
     const resHeaders = {
       ETag: `${drive.version}`,
       'Accept-Ranges': 'bytes',
-      Link: `<${fullURL}>; rel="canonical"`
+      Link: `<${fullURL}>; rel="canonical"`,
+      Allow
     }
 
     if (isDirectory) {

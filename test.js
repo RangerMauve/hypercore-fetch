@@ -128,7 +128,7 @@ test('HEAD request', async (t) => {
   const headersLink = headResponse.headers.get('Link')
 
   // Version at which the file was added
-  t.equal(headersEtag, '1', 'Headers got expected etag')
+  t.equal(headersEtag, '2', 'Headers got expected etag')
   t.equal(headersContentType, 'text/plain; charset=utf-8', 'Headers got expected mime type')
   t.ok(headersContentLength, "Headers have 'Content-Length' set.")
   t.ok(headersLastModified, "Headers have 'Last-Modified' set.")
@@ -467,7 +467,7 @@ test('EventSource extension messages', async (t) => {
 })
 
 test('Resolve DNS', async (t) => {
-  const loadResponse = await fetch('hyper://example2.mauve.moe/?noResolve')
+  const loadResponse = await fetch('hyper://blog.mauve.moe/?noResolve')
 
   const entries = await loadResponse.json()
 
@@ -494,7 +494,7 @@ test('GET older version of file from VERSION folder', async (t) => {
 
   const fileURL = new URL(`/${fileName}`, created)
   const versionFileURL = new URL(`/$/version/2/${fileName}`, created)
-  const versionRootURL = new URL(`/$/version/1/`, created)
+  const versionRootURL = new URL('/$/version/1/', created)
 
   await checkResponse(
     await fetch(fileURL, { method: 'PUT', body: data1 }), t
@@ -514,12 +514,12 @@ test('GET older version of file from VERSION folder', async (t) => {
   t.deepEqual(versionedRootContents, [], 'Old root content got loaded')
 })
 
-test.only('Handle empty string pathname', async (t) => {
+test('Handle empty string pathname', async (t) => {
   const created = await nextURL(t)
   const urlObject = new URL('', created)
-  const urlNoTrailingSlash = urlObject.href.slice(0,-1)
-  const versionedURLObject = new URL(`/$/version/3/`, created)
-  const versionedURLNoTrailingSlash = versionedURLObject.href.slice(0,-1)
+  const urlNoTrailingSlash = urlObject.href.slice(0, -1)
+  const versionedURLObject = new URL('/$/version/3/', created)
+  const versionedURLNoTrailingSlash = versionedURLObject.href.slice(0, -1)
 
   // PUT
   const putResponse = await fetch(urlNoTrailingSlash, { method: 'PUT', body: SAMPLE_CONTENT })
