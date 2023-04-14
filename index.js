@@ -511,7 +511,7 @@ export default async function makeHyperFetch ({
       return { status: 404, body: 'Not Found' }
     }
 
-    resHeaders.ETag = `${entry.seq}`
+    resHeaders.ETag = `${entry.seq + 1}`
     resHeaders['Content-Length'] = `${entry.value.blob.byteLength}`
 
     const contentType = getMimeType(path)
@@ -655,7 +655,7 @@ async function serveFile (drive, pathname, isRanged) {
   const entry = await drive.entry(pathname)
 
   const resHeaders = {
-    ETag: `${entry.seq}`,
+    ETag: `${entry.seq + 1}`,
     [HEADER_CONTENT_TYPE]: contentType,
     'Accept-Ranges': 'bytes',
     Link: `<${fullURL}>; rel="canonical"`
