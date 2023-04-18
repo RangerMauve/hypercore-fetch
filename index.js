@@ -361,6 +361,10 @@ export default async function makeHyperFetch ({
 
     const drive = await getDrive(`hyper://${hostname}`)
 
+    if (!drive.db.feed.writable) {
+      return { status: 403, body: `Cannot PUT file to read-only drive: ${drive.url}`, headers: { Location: request.url } }
+    }
+
     if (isFormData) {
       // It's a form! Get the files out and process them
       const formData = await request.formData()
@@ -399,6 +403,10 @@ export default async function makeHyperFetch ({
     const pathname = decodeURI(ensureLeadingSlash(rawPathname))
 
     const drive = await getDrive(`hyper://${hostname}`)
+
+    if (!drive.db.feed.writable) {
+      return { status: 403, body: `Cannot DELETE file in read-only drive: ${drive.url}`, headers: { Location: request.url } }
+    }
 
     if (pathname.endsWith('/')) {
       let didDelete = false
