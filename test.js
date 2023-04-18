@@ -565,6 +565,23 @@ test('Handle empty string pathname', async (t) => {
   t.deepEqual(await versionedGetResponse.json(), ['example.txt', 'example2.txt'], 'Returns root directory prior to DELETE')
 })
 
+test('Return status 403 Forbidden on attempt to modify read-only hyperdrive', async (t) => {
+  const readOnlyURL = 'hyper://blog.mauve.moe/new-file.txt'
+  const putResponse = await fetch(readOnlyURL, { method: 'PUT', body: SAMPLE_CONTENT })
+  if (putResponse.ok) {
+    throw new Error('PUT file to read-only drive should have failed')
+  } else {
+    t.equal(putResponse.status, 403, 'PUT file to read-only drive returned status 403 Forbidden')
+  }
+
+  const deleteResponse = await fetch(readOnlyURL, { method: 'DELETE' })
+  if (deleteResponse.ok) {
+    throw new Error('DELETE file in read-only drive should have failed')
+  } else {
+    t.equal(deleteResponse.status, 403, 'DELETE file to read-only drive returned status 403 Forbidden')
+  }
+})
+
 async function checkResponse (response, t, successMessage = 'Response OK') {
   if (!response.ok) {
     const message = await response.text()
