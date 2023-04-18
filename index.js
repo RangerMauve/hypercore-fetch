@@ -460,7 +460,7 @@ export default async function makeHyperFetch ({
     const isDirectory = pathname.endsWith('/')
     const fullURL = new URL(pathname, drive.url).href
 
-    const isWritable = writable && drive.writable
+    const isWritable = writable && drive.db.feed.writable
 
     const Allow = isWritable ? BASIC_METHODS.concat(WRITABLE_METHODS) : BASIC_METHODS
 
