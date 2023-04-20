@@ -89,7 +89,9 @@ export default async function makeHyperFetch ({
     router.get(`hyper://${SPECIAL_DOMAIN}/`, getKey)
     router.post(`hyper://${SPECIAL_DOMAIN}/`, createKey)
 
+    router.put(`hyper://*/${SPECIAL_FOLDER}/${VERSION_FOLDER_NAME}/**`, putFilesVersioned)
     router.put('hyper://*/**', putFiles)
+    router.delete(`hyper://*/${SPECIAL_FOLDER}/${VERSION_FOLDER_NAME}/**`, deleteFilesVersioned)
     router.delete('hyper://*/**', deleteFiles)
   }
 
@@ -394,6 +396,10 @@ export default async function makeHyperFetch ({
     return { status: 201, headers: { Location: request.url } }
   }
 
+  function putFilesVersioned (request) {
+    return { status: 405, body: 'Cannot PUT file to old version', headers: { Location: request.url } }
+  }
+
   async function deleteFiles (request) {
     const { hostname, pathname: rawPathname } = new URL(request.url)
     const pathname = decodeURI(ensureLeadingSlash(rawPathname))
@@ -420,6 +426,10 @@ export default async function makeHyperFetch ({
     await drive.del(pathname)
 
     return { status: 200 }
+  }
+
+  function deleteFilesVersioned (request) {
+    return { status: 405, body: 'Cannot DELETE old version', headers: { Location: request.url } }
   }
 
   async function headFilesVersioned (request) {
