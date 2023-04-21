@@ -582,6 +582,22 @@ test('Return status 403 Forbidden on attempt to modify read-only hyperdrive', as
   }
 })
 
+test('Check hyperdrive writability', async (t) => {
+  const created = await nextURL(t)
+
+  const readOnlyRootDirectory = 'hyper://blog.mauve.moe/?noResolve'
+  const readOnlyHeadResponse = await fetch(readOnlyRootDirectory, { method: 'HEAD' })
+  await checkResponse(readOnlyHeadResponse, t, 'Able to load HEAD')
+  const readOnlyHeadersAllow = readOnlyHeadResponse.headers.get('Allow')
+  t.equal(readOnlyHeadersAllow, 'HEAD,GET', 'Expected read-only Allows header')
+
+  const writableRootDirectory = new URL('/', created)
+  const writableHeadResponse = await fetch(writableRootDirectory, { method: 'HEAD' })
+  await checkResponse(writableHeadResponse, t, 'Able to load HEAD')
+  const writableHeadersAllow = writableHeadResponse.headers.get('Allow')
+  t.equal(writableHeadersAllow, 'HEAD,GET,PUT,DELETE', 'Expected writable Allows header')
+})
+
 async function checkResponse (response, t, successMessage = 'Response OK') {
   if (!response.ok) {
     const message = await response.text()
