@@ -128,6 +128,9 @@ The `body` can be any of the options supported by the Fetch API such as a `Strin
 
 Note that this is only available with the `writable: true` flag.
 
+An attempt to `PUT` a file to a hyperdrive which is not writable will
+fail with status `403`.
+
 ### `fetch('hyper://NAME/folder/', {method: 'PUT', body: new FormData()})`
 
 You can add multiple files to a folder using the `PUT` method with a [FormData](https://developer.mozilla.org/en-US/docs/Web/API/FormData) body.
@@ -144,6 +147,11 @@ Note that you must use the name `file` for uploaded files.
 You can delete a file or directory tree in a Hyperdrive by using the `DELETE` method.
 
 `NAME` can either be the 52 character [z32 encoded](https://github.com/mafintosh/z32) key for a Hyperdrive or Hypercore , or a domain to parse with the [DNSLink](https://www.dnslink.io/) standard.
+
+Note that this is only available with the `writable: true` flag.
+
+An attempt to `DELETE` a file in a hyperdrive which is not writable
+will fail with status `403`.
 
 ### `fetch('hyper://NAME/$/extensions/')`
 
