@@ -484,7 +484,7 @@ test('Error on invalid hostname', async (t) => {
   }
 })
 
-test('GET older version of file from VERSION folder', async (t) => {
+test('Old versions in VERSION folder', async (t) => {
   const created = await nextURL(t)
 
   const fileName = 'example.txt'
@@ -512,6 +512,27 @@ test('GET older version of file from VERSION folder', async (t) => {
   await checkResponse(versionedRootResponse, t, 'Able to GET versioned root')
   const versionedRootContents = await versionedRootResponse.json()
   t.deepEqual(versionedRootContents, [], 'Old root content got loaded')
+
+  // PUT on old version should fail
+  const putResponse = await fetch(versionFileURL, {
+    method: 'PUT',
+    body: SAMPLE_CONTENT
+  })
+  if (putResponse.ok) {
+    throw new Error('PUT old version of file should have failed')
+  } else {
+    t.equal(putResponse.status, 405, 'PUT old version returned status 405 Not Allowed')
+  }
+
+  // DELETE on old version should fail
+  const deleteResponse = await fetch(versionFileURL, {
+    method: 'delete'
+  })
+  if (deleteResponse.ok) {
+    throw new Error('DELETE old version of file should have failed')
+  } else {
+    t.equal(deleteResponse.status, 405, 'DELETE old version returned status 405 Not Allowed')
+  }
 })
 
 test('Handle empty string pathname', async (t) => {
