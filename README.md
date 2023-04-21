@@ -53,6 +53,10 @@ Thus you can get the previous version of a file by using `hyper://NAME/$/version
 
 If the resource is a file, it may contain the `Last-Modified` header if the file has had a `metadata.mtime` flag set upon update.
 
+If the resource is a directory, it will contain the `Allow` header to
+indicate whether a hyperdrive is writable (`'HEAD,GET'`) or not
+(`'HEAD,GET,PUT,DELETE'`).
+
 ### `fetch('hyper://NAME/example.txt', {method: 'GET'})`
 
 This will attempt to load `example.txt` from the archive labeled by `NAME`.
