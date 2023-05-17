@@ -143,12 +143,20 @@ test('PUT file', async (t) => {
 
   const uploadLocation = new URL('./example.txt', created)
 
-  const uploadResponse = await fetch(uploadLocation, {
+  const putResponse = await fetch(uploadLocation, {
     method: 'put',
     body: SAMPLE_CONTENT
   })
+  await checkResponse(putResponse, t, 'upload successful')
 
-  await checkResponse(uploadResponse, t, 'upload successful')
+  const putResponseETag = putResponse.headers.get('ETag')
+  const putResponseContentType = putResponse.headers.get('Content-Type')
+  const putResponseContentLength = putResponse.headers.get('Content-Length')
+  const putResponseLastModified = putResponse.headers.get('Last-Modified')
+  t.equal(putResponseETag, '2', 'Put response returned expected ETag')
+  t.equal(putResponseContentType, 'text/plain; charset=utf-8', 'Put response had expected mime type')
+  t.ok(putResponseContentLength, 'Put response had Content-Length header')
+  t.ok(putResponseLastModified, 'Put response had Last-Modified header')
 
   const uploadedContentResponse = await fetch(uploadLocation)
 

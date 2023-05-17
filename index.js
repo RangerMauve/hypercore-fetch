@@ -394,6 +394,7 @@ export default async function makeHyperFetch ({
             }
           })
         )
+        return { status: 201, headers: await resolveFileHeaders(drive, pathname, false) }
       }
     }
 
