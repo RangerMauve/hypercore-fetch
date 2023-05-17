@@ -506,13 +506,9 @@ export default async function makeHyperFetch ({
       if (!noResolve) {
         for (const indexFile of INDEX_FILES) {
           if (entries.includes(indexFile)) {
-            const mimeType = getMimeType(indexFile)
             return {
               status: 204,
-              headers: {
-                ...resHeaders,
-                [HEADER_CONTENT_TYPE]: mimeType
-              }
+              headers: resolveFileHeaders(drive, posix.join(pathname, indexFile), isRanged)
             }
           }
         }
@@ -544,39 +540,9 @@ export default async function makeHyperFetch ({
       return { status: 404, body: 'Not Found' }
     }
 
-    resHeaders.ETag = `${entry.seq + 1}`
-    resHeaders['Content-Length'] = `${entry.value.blob.byteLength}`
-
-    const contentType = getMimeType(path)
-    resHeaders[HEADER_CONTENT_TYPE] = contentType
-
-    if (entry?.value?.metadata?.mtime) {
-      const date = new Date(entry.value.metadata.mtime)
-      resHeaders[HEADER_LAST_MODIFIED] = date.toUTCString()
-    }
-
-    const size = entry.value.blob.byteLength
-    if (isRanged) {
-      const ranges = parseRange(size, isRanged)
-
-      if (ranges && ranges.length && ranges.type === 'bytes') {
-        const [{ start, end }] = ranges
-        const length = (end - start + 1)
-
-        return {
-          status: 204,
-          headers: {
-            ...resHeaders,
-            'Content-Length': `${length}`,
-            'Content-Range': `bytes ${start}-${end}/${size}`
-          }
-        }
-      }
-    }
-
     return {
       status: 204,
-      headers: resHeaders
+      headers: await resolveFileHeaders(drive, pathname, isRanged)
     }
   }
 
@@ -677,58 +643,73 @@ export default async function makeHyperFetch ({
     return serveFile(drive, path, isRanged)
   }
 
-  return fetch
-}
+  async function serveFile (drive, pathname, isRanged) {
+    const resHeaders = await resolveFileHeaders(drive, pathname, isRanged)
 
-async function serveFile (drive, pathname, isRanged) {
-  const contentType = getMimeType(pathname)
+    if (isRanged) {
+      const entry = await drive.entry(pathname)
+      const size = entry.value.blob.byteLength
+      const ranges = parseRange(size, isRanged)
 
-  const fullURL = new URL(pathname, drive.url).href
+      if (ranges && ranges.length && ranges.type === 'bytes') {
+        const [{ start, end }] = ranges
 
-  const entry = await drive.entry(pathname)
-
-  const resHeaders = {
-    ETag: `${entry.seq + 1}`,
-    [HEADER_CONTENT_TYPE]: contentType,
-    'Accept-Ranges': 'bytes',
-    Link: `<${fullURL}>; rel="canonical"`
-  }
-
-  if (entry?.value?.metadata?.mtime) {
-    const date = new Date(entry.value.metadata.mtime)
-    resHeaders[HEADER_LAST_MODIFIED] = date.toUTCString()
-  }
-
-  const size = entry.value.blob.byteLength
-  if (isRanged) {
-    const ranges = parseRange(size, isRanged)
-
-    if (ranges && ranges.length && ranges.type === 'bytes') {
-      const [{ start, end }] = ranges
-      const length = (end - start + 1)
-
-      return {
-        status: 200,
-        body: drive.createReadStream(pathname, {
-          start,
-          end
-        }),
-        headers: {
-          ...resHeaders,
-          'Content-Length': `${length}`,
-          'Content-Range': `bytes ${start}-${end}/${size}`
+        return {
+          status: 200,
+          body: drive.createReadStream(pathname, {
+            start,
+            end
+          }),
+          headers: resHeaders
         }
       }
     }
+
+    return {
+      status: 200,
+      headers: resHeaders,
+      body: drive.createReadStream(pathname)
+    }
   }
-  return {
-    status: 200,
-    headers: {
-      ...resHeaders,
-      'Content-Length': `${size}`
-    },
-    body: drive.createReadStream(pathname)
+
+  async function resolveFileHeaders (drive, pathname, isRanged) {
+    const fullURL = new URL(pathname, drive.url).href
+
+    const entry = await drive.entry(pathname)
+    const size = entry.value.blob.byteLength
+
+    const isWritable = writable && drive.db.feed.writable
+
+    const resHeaders = {
+      ETag: `${entry.seq + 1}`,
+      [HEADER_CONTENT_TYPE]: getMimeType(pathname),
+      'Accept-Ranges': 'bytes',
+      'Content-Length': `${size}`,
+      Link: `<${fullURL}>; rel="canonical"`,
+      Allow: isWritable ? BASIC_METHODS.concat(WRITABLE_METHODS) : BASIC_METHODS
+    }
+
+    if (entry?.value?.metadata?.mtime) {
+      const date = new Date(entry.value.metadata.mtime)
+      resHeaders[HEADER_LAST_MODIFIED] = date.toUTCString()
+    }
+
+    if (isRanged) {
+      const ranges = parseRange(size, isRanged)
+
+      if (ranges && ranges.length && ranges.type === 'bytes') {
+        const [{ start, end }] = ranges
+        const length = (end - start + 1)
+
+        resHeaders['Content-Length'] = `${length}`
+        resHeaders['Content-Range'] = `bytes ${start}-${end}/${size}`
+      }
+    }
+
+    return resHeaders
   }
+
+  return fetch
 }
 
 function makeToTry (pathname) {
