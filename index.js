@@ -564,7 +564,7 @@ export default async function makeHyperFetch ({
         const length = (end - start + 1)
 
         return {
-          status: 200,
+          status: 204,
           headers: {
             ...resHeaders,
             'Content-Length': `${length}`,
@@ -575,7 +575,7 @@ export default async function makeHyperFetch ({
     }
 
     return {
-      status: 200,
+      status: 204,
       headers: resHeaders
     }
   }

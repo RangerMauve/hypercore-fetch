@@ -120,6 +120,7 @@ test('HEAD request', async (t) => {
 
   await checkResponse(headResponse, t, 'Able to load HEAD')
 
+  const headersStatus = headResponse.status
   const headersEtag = headResponse.headers.get('Etag')
   const headersContentType = headResponse.headers.get('Content-Type')
   const headersContentLength = headResponse.headers.get('Content-Length')
@@ -127,6 +128,7 @@ test('HEAD request', async (t) => {
   const headersLastModified = headResponse.headers.get('Last-Modified')
   const headersLink = headResponse.headers.get('Link')
 
+  t.equal(headersStatus, 204, 'Response had expected status')
   // Version at which the file was added
   t.equal(headersEtag, '2', 'Headers got expected etag')
   t.equal(headersContentType, 'text/plain; charset=utf-8', 'Headers got expected mime type')
