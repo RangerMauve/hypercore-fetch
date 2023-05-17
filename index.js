@@ -577,7 +577,7 @@ export default async function makeHyperFetch ({
       resHeaders[HEADER_LAST_MODIFIED] = date.toUTCString()
     }
 
-    const size = entry.value.byteLength
+    const size = entry.value.blob.byteLength
     if (isRanged) {
       const ranges = parseRange(size, isRanged)
 
