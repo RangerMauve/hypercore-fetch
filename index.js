@@ -367,6 +367,8 @@ export default async function makeHyperFetch ({
       return { status: 403, body: `Cannot PUT file to read-only drive: ${drive.url}`, headers: { Location: request.url } }
     }
 
+    const mtime = Date.now()
+
     if (isFormData) {
       // It's a form! Get the files out and process them
       const formData = await request.formData()
@@ -377,7 +379,7 @@ export default async function makeHyperFetch ({
           Readable.from(data.stream()),
           drive.createWriteStream(filePath, {
             metadata: {
-              mtime: Date.now()
+              mtime
             }
           })
         )
@@ -390,18 +392,31 @@ export default async function makeHyperFetch ({
           Readable.from(request.body),
           drive.createWriteStream(pathname, {
             metadata: {
-              mtime: Date.now()
+              mtime
             }
           })
         )
       }
     }
 
-    return { status: 201, headers: { Location: request.url } }
+    const fullURL = new URL(pathname, drive.url).href
+
+    const headers = {
+      Location: request.url,
+      ETag: `${drive.version}`,
+      Link: `<${fullURL}>; rel="canonical"`,
+      [HEADER_LAST_MODIFIED]: isFormData ? undefined : new Date(mtime).toUTCString()
+    }
+
+    return { status: 201, headers }
   }
 
   function putFilesVersioned (request) {
-    return { status: 405, body: 'Cannot PUT file to old version', headers: { Location: request.url } }
+    return {
+      status: 405,
+      body: 'Cannot PUT file to old version',
+      headers: { Location: request.url }
+    }
   }
 
   async function deleteFiles (request) {
@@ -433,7 +448,14 @@ export default async function makeHyperFetch ({
     }
     await drive.del(pathname)
 
-    return { status: 200 }
+    const fullURL = new URL(pathname, drive.url).href
+
+    const headers = {
+      ETag: `${drive.version}`,
+      Link: `<${fullURL}>; rel="canonical"`
+    }
+
+    return { status: 200, headers }
   }
 
   function deleteFilesVersioned (request) {
