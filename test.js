@@ -333,6 +333,22 @@ test('Ignore index.html with noResolve', async (t) => {
   const entries = await listDirRequest.json()
   t.deepEqual(entries, ['index.html'], 'able to list index.html')
 })
+test('Ensure that noResolve works with file paths', async (t) => {
+  const created = await nextURL(t)
+  const uploadLocation = new URL('./example.txt', created)
+  const uploadResponse = await fetch(uploadLocation, {
+    method: 'put',
+    body: SAMPLE_CONTENT
+  })
+  await checkResponse(uploadResponse, t)
+
+  const noResolve = uploadLocation.href + '?noResolve'
+  const getRequest = await fetch(noResolve)
+  await checkResponse(getRequest, t)
+
+  const headRequest = await fetch(noResolve, { method: 'HEAD' })
+  await checkResponse(headRequest, t)
+})
 test('Render index.gmi', async (t) => {
   const created = await nextURL(t)
   const uploadLocation = new URL('./index.gmi', created)
