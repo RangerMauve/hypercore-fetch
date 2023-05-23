@@ -741,7 +741,7 @@ function makeToTry (pathname) {
 
 async function resolvePath (drive, pathname, noResolve) {
   if (noResolve) {
-    const entry = drive.entry(pathname)
+    const entry = await drive.entry(pathname)
 
     return { entry, path: pathname }
   }
