@@ -42,7 +42,9 @@ const INDEX_FILES = [
   'index.md',
   'index.gmi',
   'index.gemini',
-  'README.md'
+  'index.org',
+  'README.md',
+  'README.org'
 ]
 
 async function DEFAULT_RENDER_INDEX (url, files, fetch) {
