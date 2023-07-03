@@ -489,6 +489,7 @@ test('Doing a `GET` on an invalid domain/public key should cause an error', asyn
 
   const invalidPublicKeyResponse = await fetch('hyper://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/')
   t.notOk(invalidPublicKeyResponse.ok, 'Response errored out due to invalid public key')
+  t.equal(invalidPublicKeyResponse.status, 404, 'Invalid public key should 404')
 })
 
 test('Old versions in VERSION folder', async (t) => {

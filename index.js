@@ -36,6 +36,7 @@ const BASIC_METHODS = [
 ]
 
 export const ERROR_KEY_NOT_CREATED = 'Must create key with POST before reading'
+export const ERROR_DRIVE_EMPTY = 'Could not find data in drive, make sure your key is correct and that there are peers online to load data from'
 
 const INDEX_FILES = [
   'index.html',
@@ -72,7 +73,9 @@ export default async function makeHyperFetch ({
   timeout = DEFAULT_TIMEOUT,
   renderIndex = DEFAULT_RENDER_INDEX
 }) {
-  const { fetch, router } = makeRoutedFetch()
+  const { fetch, router } = makeRoutedFetch({
+    onError
+  })
 
   // Map loaded drive hostnames to their keys
   // TODO: Track LRU + cache clearing
@@ -102,6 +105,16 @@ export default async function makeHyperFetch ({
   router.get('hyper://*/**', getFiles)
   router.head('hyper://*/**', headFiles)
 
+  async function onError (e, request) {
+    return {
+      status: e.statusCode || 500,
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8'
+      },
+      body: e.stack
+    }
+  }
+
   async function getCore (hostname) {
     if (cores.has(hostname)) {
       return cores.get(hostname)
@@ -130,12 +143,19 @@ export default async function makeHyperFetch ({
     return dbCore
   }
 
-  async function getDrive (hostname) {
+  async function getDrive (hostname, errorOnNew = false) {
     if (drives.has(hostname)) {
       return drives.get(hostname)
     }
 
     const core = await getCore(hostname)
+
+    if (!core.length && errorOnNew) {
+      await core.close()
+      const e = new Error(ERROR_DRIVE_EMPTY)
+      e.statusCode = 404
+      throw e
+    }
 
     const corestore = sdk.namespace(core.id)
     const drive = new Hyperdrive(corestore, core.key)
@@ -153,8 +173,11 @@ export default async function makeHyperFetch ({
       return drives.get(key)
     }
     const core = await getDBCoreForName(key)
+
     if (!core.length && errorOnNew) {
-      throw new Error(ERROR_KEY_NOT_CREATED)
+      const e = new Error(ERROR_KEY_NOT_CREATED)
+      e.statusCode = 404
+      throw e
     }
 
     const corestore = sdk.namespace(key)
@@ -163,6 +186,7 @@ export default async function makeHyperFetch ({
     await drive.ready()
 
     drives.set(key, drive)
+    drives.set(drive.url, drive)
     drives.set(drive.core.id, drive)
 
     return drive
@@ -363,7 +387,7 @@ export default async function makeHyperFetch ({
     const contentType = request.headers.get('Content-Type') || ''
     const isFormData = contentType.includes('multipart/form-data')
 
-    const drive = await getDrive(`hyper://${hostname}`)
+    const drive = await getDrive(`hyper://${hostname}/`, true)
 
     if (!drive.db.feed.writable) {
       return { status: 403, body: `Cannot PUT file to read-only drive: ${drive.url}`, headers: { Location: request.url } }
@@ -425,7 +449,7 @@ export default async function makeHyperFetch ({
     const { hostname, pathname: rawPathname } = new URL(request.url)
     const pathname = decodeURI(ensureLeadingSlash(rawPathname))
 
-    const drive = await getDrive(`hyper://${hostname}`)
+    const drive = await getDrive(`hyper://${hostname}/`, true)
 
     if (!drive.db.feed.writable) {
       return { status: 403, body: `Cannot DELETE file in read-only drive: ${drive.url}`, headers: { Location: request.url } }
@@ -477,7 +501,7 @@ export default async function makeHyperFetch ({
     const version = parts[3]
     const realPath = ensureLeadingSlash(parts.slice(4).join('/'))
 
-    const drive = await getDrive(`hyper://${hostname}`)
+    const drive = await getDrive(`hyper://${hostname}/`, true)
 
     const snapshot = await drive.checkout(version)
 
@@ -493,7 +517,7 @@ export default async function makeHyperFetch ({
     const isRanged = request.headers.get('Range') || ''
     const noResolve = searchParams.has('noResolve')
 
-    const drive = await getDrive(`hyper://${hostname}`)
+    const drive = await getDrive(`hyper://${hostname}/`, true)
 
     return serveHead(drive, pathname, { accept, isRanged, noResolve })
   }
@@ -617,7 +641,7 @@ export default async function makeHyperFetch ({
     const version = parts[3]
     const realPath = ensureLeadingSlash(parts.slice(4).join('/'))
 
-    const drive = await getDrive(`hyper://${hostname}`)
+    const drive = await getDrive(`hyper://${hostname}/`, true)
 
     const snapshot = await drive.checkout(version)
 
@@ -634,7 +658,7 @@ export default async function makeHyperFetch ({
     const isRanged = request.headers.get('Range') || ''
     const noResolve = searchParams.has('noResolve')
 
-    const drive = await getDrive(`hyper://${hostname}`)
+    const drive = await getDrive(`hyper://${hostname}/`, true)
 
     return serveGet(drive, pathname, { accept, isRanged, noResolve })
   }
