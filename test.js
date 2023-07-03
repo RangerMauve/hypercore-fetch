@@ -419,14 +419,6 @@ test('Resolve pretty markdown URLs', async (t) => {
   t.equal(contentType, 'text/markdown; charset=utf-8', 'Got markdown mime type')
 })
 
-test('Doing a `GET` on an invalid domain should cause an error', async (t) => {
-  const url = 'hyper://example/'
-
-  const failedResponse = await fetch(url)
-
-  t.notOk(failedResponse.ok, 'Response errored out due to invalid domain')
-})
-
 test('EventSource extension messages', async (t) => {
   const domain = await nextURL(t)
 
@@ -490,14 +482,12 @@ test('Resolve DNS', async (t) => {
   t.ok(entries.length, 'Loaded contents with some files present')
 })
 
-test('Error on invalid hostname', async (t) => {
-  const loadResponse = await fetch('hyper://example/')
+test('Doing a `GET` on an invalid domain/public key should cause an error', async (t) => {
+  const invalidDomainResponse = await fetch('hyper://example/')
+  t.notOk(invalidDomainResponse.ok, 'Response errored out due to invalid domain')
 
-  if (loadResponse.ok) {
-    throw new Error('Loading without DNS or a public key should have failed')
-  } else {
-    t.pass('Invalid names led to an error')
-  }
+  const invalidPublicKeyResponse = await fetch('hyper://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/')
+  t.notOk(invalidPublicKeyResponse.ok, 'Response errored out due to invalid public key')
 })
 
 test('Old versions in VERSION folder', async (t) => {
