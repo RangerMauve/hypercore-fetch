@@ -142,6 +142,16 @@ Note that you must use the name `file` for uploaded files.
 
 `NAME` can either be the 52 character [z32 encoded](https://github.com/mafintosh/z32) key for a Hyperdrive or Hypercore , or a domain to parse with the [DNSLink](https://www.dnslink.io/) standard.
 
+### `fetch('hyper://NAME/', {method: 'DELETE'})`
+
+You can purge all the stored data for a hyperdrive by sending a `DELETE` to it's root.
+
+If this is a writable drive, your data will get fully clearned and trying to write to it again will lead to data corruption.
+
+If you try to load this drive again data will be loaded from scratch.
+
+`NAME` can either be the 52 character [z32 encoded](https://github.com/mafintosh/z32) key for a Hyperdrive or Hypercore , or a domain to parse with the [DNSLink](https://www.dnslink.io/) standard.
+
 ### `fetch('hyper://NAME/example.txt', {method: 'DELETE'})`
 
 You can delete a file or directory tree in a Hyperdrive by using the `DELETE` method.

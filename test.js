@@ -297,6 +297,24 @@ test('DELETE a directory', async (t) => {
   const entries = await listDirRequest.json()
   t.deepEqual(entries, [], 'subfolder got deleted')
 })
+test.only('DELETE a drive from storage', async (t) => {
+  const created = await nextURL(t)
+
+  const uploadLocation = new URL('./subfolder/example.txt', created)
+  const uploadResponse = await fetch(uploadLocation, {
+    method: 'put',
+    body: SAMPLE_CONTENT
+  })
+  await checkResponse(uploadResponse, t)
+
+  const purgeResponse = await fetch(created, { method: 'delete' })
+
+  await checkResponse(purgeResponse, t, 'Able to purge')
+
+  const listDirRequest = await fetch(created)
+
+  t.notOk(listDirRequest.ok, 'Error when trying to read after purge')
+})
 test('Read index.html', async (t) => {
   const created = await nextURL(t)
   const uploadLocation = new URL('./index.html', created)
