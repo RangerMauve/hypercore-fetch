@@ -469,8 +469,40 @@ export default async function makeHyperFetch ({
   async function deleteFiles (request) {
     const { hostname, pathname: rawPathname } = new URL(request.url)
     const pathname = decodeURI(ensureLeadingSlash(rawPathname))
+    const cacheControl = request.headers.get('Cache-Control') || ''
 
     const drive = await getDrive(`hyper://${hostname}/`, true)
+
+    if (cacheControl.includes('no-store')) {
+      // Delete locally cached blob, leaving entry metadata as-is.
+      if (pathname.endsWith('/')) {
+        // For directories, recursively clear cached blobs.
+        let didClear = false
+        for await (const entry of drive.list(pathname)) {
+          await drive.clear(entry.key)
+          didClear = true
+        }
+        if (!didClear) {
+          return { status: 404, body: 'Unable to clear local cache', headers: { [HEADER_CONTENT_TYPE]: MIME_TEXT_PLAIN } }
+        }
+        return { status: 200 }
+      }
+
+      const entry = await drive.entry(pathname)
+
+      if (!entry) {
+        return { status: 404, body: 'Not Found', headers: { [HEADER_CONTENT_TYPE]: MIME_TEXT_PLAIN } }
+      }
+      await drive.clear(pathname)
+
+      const fullURL = new URL(pathname, drive.url).href
+
+      const headers = {
+        Link: `<${fullURL}>; rel="canonical"`
+      }
+
+      return { status: 200, headers }
+    }
 
     if (!drive.db.feed.writable) {
       return { status: 403, body: `Cannot DELETE file in read-only drive: ${drive.url}`, headers: { Location: request.url } }
