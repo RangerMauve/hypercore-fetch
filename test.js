@@ -297,7 +297,7 @@ test('DELETE a directory', async (t) => {
   const entries = await listDirRequest.json()
   t.deepEqual(entries, [], 'subfolder got deleted')
 })
-test.only('DELETE a drive from storage', async (t) => {
+test('DELETE a drive from storage', async (t) => {
   const created = await nextURL(t)
 
   const uploadLocation = new URL('./subfolder/example.txt', created)
