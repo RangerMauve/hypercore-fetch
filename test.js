@@ -276,6 +276,39 @@ test('DELETE a file', async (t) => {
 
   t.deepEqual(await dirResponse.json(), ['example.txt'], 'Only one file remains')
 })
+test.only('Clear the cached blobs of a file', async (t) => {
+  const created = await nextURL(t)
+
+  const formData = new FormData()
+  formData.append('file', new Blob([SAMPLE_CONTENT]), 'example.txt')
+  formData.append('file', new Blob([SAMPLE_CONTENT]), 'example2.txt')
+
+  const uploadedResponse = await fetch(created, {
+    method: 'put',
+    body: formData
+  })
+  await checkResponse(uploadedResponse, t)
+
+  const file2URL = new URL('/example2.txt', created)
+  const clearResponse = await fetch(file2URL, {
+    method: 'delete',
+    headers: {
+      'Cache-Control': 'no-store'
+    }
+  })
+
+  await checkResponse(clearResponse, t, 'Able to clear cache.')
+
+  const dirResponse = await fetch(created)
+
+  await checkResponse(dirResponse, t)
+
+  t.deepEqual(await dirResponse.json(), ['example.txt', 'example2.txt'], 'Both file entries remain')
+
+  // This request hangs. We should add an optional timeout.
+  // const file2Response = await fetch(file2URL)
+  // t.notOk(await file2Response.text(), 'Error when trying to read after clear')
+})
 test('DELETE a directory', async (t) => {
   const created = await nextURL(t)
 
