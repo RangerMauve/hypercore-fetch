@@ -414,6 +414,41 @@ test('Read directory as HTML', async (t) => {
   t.ok(html.includes('<title'), 'Listing has title')
   t.ok(html.includes('./example.txt'), 'Listing has link to file')
 })
+test('Read directory with full metadata', async (t) => {
+  const created = await nextURL(t)
+
+  const uploadLocation1 = new URL('./foo', created)
+  const uploadLocation2 = new URL('./bar/baz', created)
+
+  const uploadResponse1 = await fetch(uploadLocation1, {
+    method: 'put',
+    body: SAMPLE_CONTENT
+  })
+  await checkResponse(uploadResponse1, t)
+
+  const uploadResponse2 = await fetch(uploadLocation2, {
+    method: 'put',
+    body: SAMPLE_CONTENT
+  })
+  await checkResponse(uploadResponse2, t)
+
+  const listDirRequest = await fetch(created, {
+    headers: {
+      Accept: 'application/json; metadata=full'
+    }
+  })
+  await checkResponse(listDirRequest, t, 'Able to list directory contents with metadata')
+
+  const [entryBar, entryFoo] = await listDirRequest.json()
+
+  t.equal(entryFoo.key, '/foo', 'Got expected full path')
+  t.equal(entryFoo.seq, 1, 'Got expected seq number')
+  t.equal(typeof entryFoo.value.metadata.mtime, 'number');
+
+  t.equal(entryBar.key, '/bar/', 'Got expected full path')
+  t.notOk(entryBar.seq, undefined, 'Got no seq number for bar')
+  t.notOk(entryBar.value, 'Got no value for bar');
+})
 test('Resolve pretty markdown URLs', async (t) => {
   const created = await nextURL(t)
 
