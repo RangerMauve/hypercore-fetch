@@ -85,6 +85,30 @@ e.g.
 
 Files in the directory will be listed under their name, sub-directories will have a `/` appended to them.
 
+Alternatively, you can set the `Accept` header to `application/json;
+metadata=full` in order to receive the directory contents with full
+metadata:
+
+```json
+[{
+  seq: 1,
+  key: '/example.txt',
+  value: {
+    executable: false,
+    linkname: null,
+    blob: { byteOffset: 0, blockOffset: 0, blockLength: 1, byteLength: 11 },
+    metadata: { mtime: 1691832753029 }
+  }
+},
+{
+  key: '/posts/
+}]
+```
+
+With `Accept: application/json; metadata=full`, each object's `key` is
+the full path to the file/folder. You can distinguish directories from
+files by their lack of metadata.
+
 `NAME` can either be the 52 character [z32 encoded](https://github.com/mafintosh/z32) key for a Hyperdrive or Hypercore , or a domain to parse with the [DNSLink](https://www.dnslink.io/) standard.
 
 ### `fetch('hyper://NAME/example/?noResolve', {method: 'GET'})`
