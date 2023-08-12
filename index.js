@@ -19,6 +19,7 @@ const PEER_REMOVE = 'peer-remove'
 
 const MIME_TEXT_PLAIN = 'text/plain; charset=utf-8'
 const MIME_APPLICATION_JSON = 'application/json'
+const MIME_APPLICATION_JSON_METADATA_FULL = 'application/json; metadata=full'
 const MIME_TEXT_HTML = 'text/html; charset=utf-8'
 const MIME_EVENT_STREAM = 'text/event-stream; charset=utf-8'
 
@@ -694,7 +695,10 @@ export default async function makeHyperFetch ({
         Link: `<${fullURL}>; rel="canonical"`
       }
 
-      const entries = await listEntries(drive, pathname)
+
+      const metadata = accept.includes(MIME_APPLICATION_JSON_METADATA_FULL)
+
+      const entries = await listEntries(drive, pathname, metadata)
 
       if (!entries.length && pathname !== '/') {
         return {
@@ -825,15 +829,23 @@ async function resolvePath (drive, pathname, noResolve) {
   return { entry: null, path: null }
 }
 
-async function listEntries (drive, pathname = '/') {
+async function listEntries (drive, pathname = '/', metadata = false) {
   const entries = []
   for await (const path of drive.readdir(pathname)) {
     const fullPath = posix.join(pathname, path)
     const stat = await drive.entry(fullPath)
     if (stat === null) {
-      entries.push(path + '/')
+      if (metadata) {
+        entries.push({ key: fullPath + '/' })
+      } else {
+        entries.push(path + '/')
+      }
     } else {
-      entries.push(path)
+      if (metadata) {
+        entries.push(stat)
+      } else {
+        entries.push(path)
+      }
     }
   }
   return entries
