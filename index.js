@@ -24,6 +24,7 @@ const MIME_EVENT_STREAM = 'text/event-stream; charset=utf-8'
 
 const HEADER_CONTENT_TYPE = 'Content-Type'
 const HEADER_LAST_MODIFIED = 'Last-Modified'
+const HEADER_X_DRIVE_SIZE = 'X-Drive-Size'
 
 const WRITABLE_METHODS = [
   'PUT',
@@ -443,7 +444,8 @@ export default async function makeHyperFetch ({
       Location: request.url,
       ETag: `${drive.version}`,
       Link: `<${fullURL}>; rel="canonical"`,
-      [HEADER_LAST_MODIFIED]: isFormData ? undefined : new Date(mtime).toUTCString()
+      [HEADER_LAST_MODIFIED]: isFormData ? undefined : new Date(mtime).toUTCString(),
+      [HEADER_X_DRIVE_SIZE]: await driveSize(drive)
     }
 
     return { status: 201, headers }
@@ -485,7 +487,7 @@ export default async function makeHyperFetch ({
       if (!didDelete) {
         return { status: 404, body: 'Not Found', headers: { [HEADER_CONTENT_TYPE]: MIME_TEXT_PLAIN } }
       }
-      return { status: 200 }
+      return { status: 200, headers: { [HEADER_X_DRIVE_SIZE]: await driveSize(drive) } }
     }
 
     const entry = await drive.entry(pathname)
@@ -499,7 +501,8 @@ export default async function makeHyperFetch ({
 
     const headers = {
       ETag: `${drive.version}`,
-      Link: `<${fullURL}>; rel="canonical"`
+      Link: `<${fullURL}>; rel="canonical"`,
+      [HEADER_X_DRIVE_SIZE]: await driveSize(drive)
     }
 
     return { status: 200, headers }
@@ -555,6 +558,7 @@ export default async function makeHyperFetch ({
       ETag: `${drive.version}`,
       'Accept-Ranges': 'bytes',
       Link: `<${fullURL}>; rel="canonical"`,
+      [HEADER_X_DRIVE_SIZE]: await driveSize(drive),
       Allow
     }
 
@@ -691,7 +695,8 @@ export default async function makeHyperFetch ({
     if (isDirectory) {
       const resHeaders = {
         ETag: `${drive.version}`,
-        Link: `<${fullURL}>; rel="canonical"`
+        Link: `<${fullURL}>; rel="canonical"`,
+        [HEADER_X_DRIVE_SIZE]: await driveSize(drive)
       }
 
       const entries = await listEntries(drive, pathname)
@@ -759,6 +764,7 @@ async function serveFile (drive, pathname, isRanged) {
   const resHeaders = {
     ETag: `${entry.seq + 1}`,
     [HEADER_CONTENT_TYPE]: contentType,
+    [HEADER_X_DRIVE_SIZE]: await driveSize(drive),
     'Accept-Ranges': 'bytes',
     Link: `<${fullURL}>; rel="canonical"`
   }
@@ -858,4 +864,16 @@ function getMimeType (path) {
 
 function ensureLeadingSlash (path) {
   return path.startsWith('/') ? path : '/' + path
+}
+
+async function driveSize (drive) {
+  // See drives info.js
+  const dbInfo = await drive.db.feed.info({ storage: true })
+  const blobsInfo = await drive.blobs.core.info({ storage: true })
+  return calculateSize(dbInfo) + calculateSize(blobsInfo)
+}
+
+function calculateSize (info) {
+  // See drives info.js
+  return info.storage.oplog + info.storage.tree + info.storage.blocks + info.storage.bitfield
 }

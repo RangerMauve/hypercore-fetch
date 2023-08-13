@@ -7,6 +7,8 @@ import { once } from 'events'
 import makeHyperFetch from './index.js'
 
 const SAMPLE_CONTENT = 'Hello World'
+const MIN_DRIVE_SIZE = '4194304'
+
 let count = 0
 function next () {
   return count++
@@ -73,10 +75,12 @@ test('Quick check', async (t) => {
   const content = await uploadedContentResponse.text()
   const contentType = uploadedContentResponse.headers.get('Content-Type')
   const contentLink = uploadedContentResponse.headers.get('Link')
+  const headersXDriveSize = uploadedContentResponse.headers.get('X-Drive-Size')
 
   t.match(contentLink, /^<hyper:\/\/[0-9a-z]{52}\/example%20.txt>; rel="canonical"$/, 'Link header includes both public key and path.')
   t.equal(contentType, 'text/plain; charset=utf-8', 'Content got expected mime type')
   t.equal(content, SAMPLE_CONTENT, 'Got uploaded content back out')
+  t.equal(headersXDriveSize, MIN_DRIVE_SIZE, 'got drive size')
 
   const dirResponse = await fetch2(created)
 
@@ -126,6 +130,7 @@ test('HEAD request', async (t) => {
   const headersAcceptRanges = headResponse.headers.get('Accept-Ranges')
   const headersLastModified = headResponse.headers.get('Last-Modified')
   const headersLink = headResponse.headers.get('Link')
+  const headersXDriveSize = headResponse.headers.get('X-Drive-Size')
 
   t.equal(headResponse.status, 204, 'Response had expected status')
   // Version at which the file was added
@@ -135,6 +140,7 @@ test('HEAD request', async (t) => {
   t.ok(headersLastModified, "Headers have 'Last-Modified' set.")
   t.equal(headersAcceptRanges, 'bytes')
   t.match(headersLink, /^<hyper:\/\/[0-9a-z]{52}\/example.txt>; rel="canonical"$/, 'Link header includes both public key and path.')
+  t.equal(headersXDriveSize, MIN_DRIVE_SIZE, 'got drive size')
 })
 
 test('PUT file', async (t) => {
@@ -156,10 +162,12 @@ test('PUT file', async (t) => {
   const content = await uploadedContentResponse.text()
   const contentType = uploadedContentResponse.headers.get('Content-Type')
   const lastModified = uploadedContentResponse.headers.get('Last-Modified')
+  const headersXDriveSize = uploadedContentResponse.headers.get('X-Drive-Size')
 
   t.equal(contentType, 'text/plain; charset=utf-8', 'Content got expected mime type')
   t.equal(content, SAMPLE_CONTENT, 'Got uploaded content back out')
   t.ok(lastModified, 'Last-Modified header got set')
+  t.equal(headersXDriveSize, MIN_DRIVE_SIZE, 'got drive size')
 })
 test('PUT FormData', async (t) => {
   const created = await nextURL(t)
