@@ -51,6 +51,10 @@ This will change only when the drive has gotten an update of some sort and is mo
 The `ETag` representing a file's sequence number represents the version the Hyperdrive was at when the file was added.
 Thus you can get the previous version of a file by using `hyper://NAME/$/version/${ETAG}/example.txt`.
 
+The `X-Drive-Size` header represents the size in bytes that the
+requested hyperdrive (the whole drive, not just the requested
+file/directory) locally takes up on disk.
+
 If the resource is a file, it may contain the `Last-Modified` header if the file has had a `metadata.mtime` flag set upon update.
 
 If the resource is a directory, it will contain the `Allow` header to
