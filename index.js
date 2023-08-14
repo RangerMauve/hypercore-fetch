@@ -3,7 +3,7 @@ import { posix } from 'path'
 import { Readable, pipelinePromise } from 'streamx'
 import Hyperdrive from 'hyperdrive'
 import { makeRoutedFetch } from 'make-fetch'
-import mime from 'mime/lite.js'
+import mime from 'mime/index.js'
 import parseRange from 'range-parser'
 import { EventIterator } from 'event-iterator'
 
