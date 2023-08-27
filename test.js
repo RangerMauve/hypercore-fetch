@@ -142,9 +142,13 @@ test('PUT file', async (t) => {
 
   const uploadLocation = new URL('./example.txt', created)
 
+  const fakeDate = new Date(Date.parse(0)).toUTCString()
   const uploadResponse = await fetch(uploadLocation, {
     method: 'put',
-    body: SAMPLE_CONTENT
+    body: SAMPLE_CONTENT,
+    headers: {
+      Date: fakeDate
+    }
   })
 
   await checkResponse(uploadResponse, t, 'upload successful')
@@ -159,7 +163,7 @@ test('PUT file', async (t) => {
 
   t.equal(contentType, 'text/plain; charset=utf-8', 'Content got expected mime type')
   t.equal(content, SAMPLE_CONTENT, 'Got uploaded content back out')
-  t.ok(lastModified, 'Last-Modified header got set')
+  t.equal(lastModified, fakeDate, 'Last-Modified header was set to value of Date header')
 })
 test('PUT FormData', async (t) => {
   const created = await nextURL(t)
