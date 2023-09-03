@@ -160,6 +160,7 @@ export default async function makeHyperFetch ({
 
     const corestore = sdk.namespace(core.id)
     const drive = new Hyperdrive(corestore, core.key)
+    console.log('drive', drive)
 
     await drive.ready()
 
