@@ -504,6 +504,12 @@ test('Resolve DNS', async (t) => {
   const entries = await loadResponse.json()
 
   t.ok(entries.length, 'Loaded contents with some files present')
+
+  const rawLink = loadResponse.headers.get('Link').match(/<(.+)>/)[1]
+  const loadRawURLResponse = await fetch(rawLink)
+
+  const rawLinkEntries = await loadRawURLResponse.json()
+  t.deepEqual(rawLinkEntries, entries, 'Raw link resolves to same content as DNS domain.')
 })
 
 test('Doing a `GET` on an invalid domain/public key should cause an error', async (t) => {
