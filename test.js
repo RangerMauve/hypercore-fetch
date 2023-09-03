@@ -7,6 +7,7 @@ import { once } from 'events'
 import makeHyperFetch from './index.js'
 
 const SAMPLE_CONTENT = 'Hello World'
+const DNS_DOMAIN = 'blog.mauve.moe'
 let count = 0
 function next () {
   return count++
@@ -498,7 +499,7 @@ test('EventSource extension messages', async (t) => {
 })
 
 test('Resolve DNS', async (t) => {
-  const loadResponse = await fetch('hyper://blog.mauve.moe/?noResolve')
+  const loadResponse = await fetch(`hyper://${DNS_DOMAIN}/?noResolve`)
 
   const entries = await loadResponse.json()
 
@@ -614,7 +615,7 @@ test('Handle empty string pathname', async (t) => {
 })
 
 test('Return status 403 Forbidden on attempt to modify read-only hyperdrive', async (t) => {
-  const readOnlyURL = 'hyper://blog.mauve.moe/new-file.txt'
+  const readOnlyURL = `hyper://${DNS_DOMAIN}/new-file.txt`
   const putResponse = await fetch(readOnlyURL, { method: 'PUT', body: SAMPLE_CONTENT })
   if (putResponse.ok) {
     throw new Error('PUT file to read-only drive should have failed')
@@ -633,7 +634,7 @@ test('Return status 403 Forbidden on attempt to modify read-only hyperdrive', as
 test('Check hyperdrive writability', async (t) => {
   const created = await nextURL(t)
 
-  const readOnlyRootDirectory = 'hyper://blog.mauve.moe/?noResolve'
+  const readOnlyRootDirectory = `hyper://${DNS_DOMAIN}/?noResolve`
   const readOnlyHeadResponse = await fetch(readOnlyRootDirectory, { method: 'HEAD' })
   await checkResponse(readOnlyHeadResponse, t, 'Able to load HEAD')
   const readOnlyHeadersAllow = readOnlyHeadResponse.headers.get('Allow')
