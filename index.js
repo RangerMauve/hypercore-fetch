@@ -485,7 +485,15 @@ export default async function makeHyperFetch ({
       if (!didDelete) {
         return { status: 404, body: 'Not Found', headers: { [HEADER_CONTENT_TYPE]: MIME_TEXT_PLAIN } }
       }
-      return { status: 200 }
+
+      const fullURL = new URL(pathname, drive.url).href
+
+      const headers = {
+        ETag: `${drive.version}`,
+        Link: `<${fullURL}>; rel="canonical"`
+      }
+
+      return { status: 200, headers }
     }
 
     const entry = await drive.entry(pathname)
