@@ -120,13 +120,18 @@ Note that this is only available with the `writable: true` flag.
 
 ### `fetch('hyper://NAME/example.txt', {method: 'PUT', body: 'Hello World'})`
 
-You can add files to archives using a `PUT` method along with a `body`.
+You can add files to archives using a `PUT` method along with a
+`body`. Note that this is only available with the `writable: true`
+flag.
 
 The `body` can be any of the options supported by the Fetch API such as a `String`, `Blob`, `FormData`, or `ReadableStream`.
 
 `NAME` can either be the 52 character [z32 encoded](https://github.com/mafintosh/z32) key for a Hyperdrive or Hypercore , or a domain to parse with the [DNSLink](https://www.dnslink.io/) standard.
 
-Note that this is only available with the `writable: true` flag.
+The mtime metadata is automatically set to the current time when
+uploading. To override this value, pass a `Date` header with a value
+set to a date string according to [RFC
+7231](https://datatracker.ietf.org/doc/html/rfc7231#section-7.1.1.1).
 
 An attempt to `PUT` a file to a hyperdrive which is not writable will
 fail with status `403`.

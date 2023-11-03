@@ -397,6 +397,7 @@ export default async function makeHyperFetch ({
     const { hostname, pathname: rawPathname } = new URL(request.url)
     const pathname = decodeURI(ensureLeadingSlash(rawPathname))
     const contentType = request.headers.get('Content-Type') || ''
+    const mtime = Date.parse(request.headers.get('Date')) || Date.now()
     const isFormData = contentType.includes('multipart/form-data')
 
     const drive = await getDrive(`hyper://${hostname}/`, true)
@@ -404,8 +405,6 @@ export default async function makeHyperFetch ({
     if (!drive.db.feed.writable) {
       return { status: 403, body: `Cannot PUT file to read-only drive: ${drive.url}`, headers: { Location: request.url } }
     }
-
-    const mtime = Date.now()
 
     if (isFormData) {
       // It's a form! Get the files out and process them
