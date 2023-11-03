@@ -129,7 +129,7 @@ The `body` can be any of the options supported by the Fetch API such as a `Strin
 `NAME` can either be the 52 character [z32 encoded](https://github.com/mafintosh/z32) key for a Hyperdrive or Hypercore , or a domain to parse with the [DNSLink](https://www.dnslink.io/) standard.
 
 The mtime metadata is automatically set to the current time when
-uploading. To override this value, pass a `Date` header with a value
+uploading. To override this value, pass a `Last-Modified` header with a value
 set to a date string according to [RFC
 7231](https://datatracker.ietf.org/doc/html/rfc7231#section-7.1.1.1).
 

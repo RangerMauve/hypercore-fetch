@@ -397,7 +397,7 @@ export default async function makeHyperFetch ({
     const { hostname, pathname: rawPathname } = new URL(request.url)
     const pathname = decodeURI(ensureLeadingSlash(rawPathname))
     const contentType = request.headers.get('Content-Type') || ''
-    const mtime = Date.parse(request.headers.get('Date')) || Date.now()
+    const mtime = Date.parse(request.headers.get('Last-Modified')) || Date.now()
     const isFormData = contentType.includes('multipart/form-data')
 
     const drive = await getDrive(`hyper://${hostname}/`, true)

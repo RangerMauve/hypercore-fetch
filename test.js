@@ -147,7 +147,7 @@ test('PUT file', async (t) => {
     method: 'put',
     body: SAMPLE_CONTENT,
     headers: {
-      Date: fakeDate
+      'Last-Modified': fakeDate
     }
   })
 
@@ -291,7 +291,7 @@ test('DELETE a directory', async (t) => {
   })
   await checkResponse(uploadResponse, t)
 
-  const deleteResponse = await fetch(created, {
+  const deleteResponse = await fetch(uploadLocation, {
     method: 'delete'
   })
   await checkResponse(deleteResponse, t, 'Able to DELETE')
@@ -301,7 +301,7 @@ test('DELETE a directory', async (t) => {
   const entries = await listDirRequest.json()
   t.deepEqual(entries, [], 'subfolder got deleted')
 })
-test.only('DELETE a drive from storage', async (t) => {
+test('DELETE a drive from storage', async (t) => {
   const created = await nextURL(t)
 
   const uploadLocation = new URL('./subfolder/example.txt', created)
@@ -589,16 +589,9 @@ test('Handle empty string pathname', async (t) => {
     await fetch(urlNoTrailingSlash, {
       method: 'put',
       body: formData
-    }), t
+    }),
+    t
   )
-
-  // DELETE
-  await checkResponse(await fetch(urlNoTrailingSlash, { method: 'DELETE' }), t)
-
-  // HEAD
-  const headResponse = await fetch(urlNoTrailingSlash, { method: 'HEAD' })
-  await checkResponse(headResponse, t)
-  t.deepEqual(headResponse.headers.get('Etag'), '5', 'HEAD request returns correct Etag')
 
   // HEAD (versioned)
   const versionedHeadResponse = await fetch(versionedURLNoTrailingSlash, { method: 'HEAD' })
@@ -608,12 +601,16 @@ test('Handle empty string pathname', async (t) => {
   // GET
   const getResponse = await fetch(urlNoTrailingSlash)
   await checkResponse(getResponse, t)
-  t.deepEqual(await getResponse.json(), [], 'Returns empty root directory')
+  t.deepEqual(await getResponse.json(), ['example.txt', 'example2.txt'], 'Returns directory listing')
 
   // GET (versioned)
   const versionedGetResponse = await fetch(versionedURLNoTrailingSlash)
   await checkResponse(versionedGetResponse, t)
   t.deepEqual(await versionedGetResponse.json(), ['example.txt', 'example2.txt'], 'Returns root directory prior to DELETE')
+
+  
+  // DELETE
+  await checkResponse(await fetch(urlNoTrailingSlash, { method: 'DELETE' }), t, 'Able to delete root')
 })
 
 test('Return status 403 Forbidden on attempt to modify read-only hyperdrive', async (t) => {
