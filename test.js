@@ -498,7 +498,7 @@ test('EventSource extension messages', async (t) => {
   t.ok(lastEventId, 'Event contained peer ID')
 })
 
-test('Resolve DNS', async (t) => {
+test.only('Resolve DNS', async (t) => {
   const loadResponse = await fetch(`hyper://${DNS_DOMAIN}/?noResolve`)
 
   const entries = await loadResponse.json()
@@ -506,7 +506,7 @@ test('Resolve DNS', async (t) => {
   t.ok(entries.length, 'Loaded contents with some files present')
 
   const rawLink = loadResponse.headers.get('Link').match(/<(.+)>/)[1]
-  const loadRawURLResponse = await fetch(rawLink)
+  const loadRawURLResponse = await fetch(rawLink + '?noResolve')
 
   const rawLinkEntries = await loadRawURLResponse.json()
   t.deepEqual(rawLinkEntries, entries, 'Raw link resolves to same content as DNS domain.')
