@@ -498,7 +498,7 @@ test('EventSource extension messages', async (t) => {
   t.ok(lastEventId, 'Event contained peer ID')
 })
 
-test.only('Resolve DNS', async (t) => {
+test('Resolve DNS', async (t) => {
   const loadResponse = await fetch(`hyper://${DNS_DOMAIN}/?noResolve`)
 
   const entries = await loadResponse.json()
