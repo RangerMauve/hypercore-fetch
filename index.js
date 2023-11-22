@@ -169,6 +169,7 @@ export default async function makeHyperFetch ({
     })
 
     drives.set(drive.core.id, drive)
+    drives.set(drive.core.url, drive)
     drives.set(hostname, drive)
 
     return drive
