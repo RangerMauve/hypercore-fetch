@@ -16,6 +16,7 @@ const EXTENSION_EVENT = 'extension-message'
 const VERSION_FOLDER_NAME = 'version'
 const PEER_OPEN = 'peer-open'
 const PEER_REMOVE = 'peer-remove'
+const DIFF_FOLDER_NAME = 'diff'
 
 const MIME_TEXT_PLAIN = 'text/plain; charset=utf-8'
 const MIME_APPLICATION_JSON = 'application/json'
@@ -103,6 +104,7 @@ export default async function makeHyperFetch ({
 
   router.head(`hyper://*/${SPECIAL_FOLDER}/${VERSION_FOLDER_NAME}/**`, headFilesVersioned)
   router.get(`hyper://*/${SPECIAL_FOLDER}/${VERSION_FOLDER_NAME}/**`, getFilesVersioned)
+  router.get(`hyper://*/${SPECIAL_FOLDER}/${DIFF_FOLDER_NAME}/**`, diffVersions)
   router.get('hyper://*/**', getFiles)
   router.head('hyper://*/**', headFiles)
 
@@ -744,6 +746,54 @@ export default async function makeHyperFetch ({
     }
 
     return serveFile(drive, path, isRanged)
+  }
+
+  async function diffVersions (request) {
+    const url = new URL(request.url)
+    const { hostname, pathname: rawPathname } = url
+    const pathname = decodeURI(ensureLeadingSlash(rawPathname))
+
+    const parts = pathname.split('/')
+    const versions = parts[3]
+    // newVersion is undefined when versions is just a single number.
+    const [oldVersion, newVersion] = versions.split('..').map(Number)
+    const realPath = ensureLeadingSlash(parts.slice(4).join('/'))
+
+    const drive = await getDrive(`hyper://${hostname}/`, true)
+
+    const resHeaders = {
+      Link: `<${url.href}>; rel="canonical"`
+    }
+
+    if (oldVersion > drive.version || (newVersion !== undefined && newVersion > drive.version)) {
+      return {
+        status: 404,
+        body: 'Versions out of range',
+        headers: {
+          ...resHeaders,
+          ETag: drive.version
+        }
+      }
+    }
+
+    const snapshot = newVersion ? await drive.checkout(newVersion) : drive
+
+    const diffs = []
+
+    for await (const diff of snapshot.diff(oldVersion, realPath)) {
+      // TODO: Use try/catch?
+      diffs.push(diff)
+    }
+
+    return {
+      status: 200,
+      // TODO: More headers?
+      headers: {
+        ...resHeaders,
+        [HEADER_CONTENT_TYPE]: MIME_APPLICATION_JSON
+      },
+      body: JSON.stringify(diffs, null, '\t')
+    }
   }
 
   return fetch
