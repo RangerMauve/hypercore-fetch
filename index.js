@@ -559,11 +559,9 @@ export default async function makeHyperFetch ({
     }
 
     if (isDirectory) {
-      const entries = await listEntries(drive, pathname)
+      const isEmpty = !await drive.db.sub('files').peek(prefixRange(pathname.slice(0, -1)))
 
-      const hasItems = entries.length
-
-      if (!hasItems && pathname !== '/') {
+      if (isEmpty && pathname !== '/') {
         return {
           status: 404,
           headers: {
@@ -573,6 +571,7 @@ export default async function makeHyperFetch ({
       }
 
       if (!noResolve) {
+        const entries = await listEntries(drive, pathname)
         for (const indexFile of INDEX_FILES) {
           if (entries.includes(indexFile)) {
             const mimeType = getMimeType(indexFile)
@@ -858,4 +857,10 @@ function getMimeType (path) {
 
 function ensureLeadingSlash (path) {
   return path.startsWith('/') ? path : '/' + path
+}
+
+function prefixRange (name, prev = '/') {
+  // Copied from hyperdrive/index.js
+  // '0' is binary +1 of /
+  return { gt: name + prev, lt: name + '0' }
 }
