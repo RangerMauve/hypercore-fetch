@@ -1,7 +1,6 @@
 import { posix } from 'path'
 
 import { Readable, pipelinePromise } from 'streamx'
-import Hyperdrive from 'hyperdrive'
 import { makeRoutedFetch } from 'make-fetch'
 import mime from 'mime/index.js'
 import parseRange from 'range-parser'
@@ -79,9 +78,7 @@ export default async function makeHyperFetch ({
 
   // Map loaded drive hostnames to their keys
   // TODO: Track LRU + cache clearing
-  const drives = new Map()
   const extensions = new Map()
-  const cores = new Map()
 
   if (extensionMessages) {
     router.get(`hyper://*/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/`, listExtensions)
@@ -114,95 +111,6 @@ export default async function makeHyperFetch ({
       },
       body: e.stack
     }
-  }
-
-  async function getCore (hostname) {
-    if (cores.has(hostname)) {
-      return cores.get(hostname)
-    }
-    const core = await sdk.get(hostname)
-    await core.ready()
-    cores.set(core.id, core)
-    cores.set(core.url, core)
-    return core
-  }
-
-  async function getDBCoreForName (name) {
-    const corestore = sdk.namespace(name)
-    const dbCore = corestore.get({ name: 'db' })
-    await dbCore.ready()
-
-    if (!dbCore.discovery) {
-      const discovery = sdk.join(dbCore.discoveryKey)
-      dbCore.discovery = discovery
-      dbCore.once('close', () => {
-        discovery.destroy()
-      })
-      await discovery.flushed()
-    }
-
-    return dbCore
-  }
-
-  async function getDrive (hostname, errorOnNew = false) {
-    if (drives.has(hostname)) {
-      return drives.get(hostname)
-    }
-
-    const core = await getCore(hostname)
-
-    if (!core.length && errorOnNew) {
-      await core.close()
-      const e = new Error(ERROR_DRIVE_EMPTY)
-      e.statusCode = 404
-      throw e
-    }
-
-    const corestore = sdk.namespace(core.id)
-    const drive = new Hyperdrive(corestore, core.key)
-
-    await drive.ready()
-
-    drive.once('close', () => {
-      drives.delete(drive.core.id)
-      drives.delete(hostname)
-    })
-
-    drives.set(drive.core.id, drive)
-    drives.set(drive.core.url, drive)
-    drives.set(hostname, drive)
-
-    return drive
-  }
-
-  async function getDriveFromKey (key, errorOnNew = false) {
-    if (drives.has(key)) {
-      return drives.get(key)
-    }
-    const core = await getDBCoreForName(key)
-
-    if (!core.length && errorOnNew) {
-      const e = new Error(ERROR_KEY_NOT_CREATED)
-      e.statusCode = 404
-      throw e
-    }
-
-    const corestore = sdk.namespace(key)
-    const drive = new Hyperdrive(corestore)
-
-    await drive.ready()
-
-    drive.once('close', () => {
-      drives.delete(key)
-      drives.delete(drive.url)
-      drives.delete(drive.core.id)
-    })
-
-    drives.set(key, drive)
-    drives.set(drive.url, drive)
-    drives.set(drive.core.id, drive)
-
-    return drive
   }
 
   async function getExtension (core, name) {
@@ -244,7 +152,7 @@ export default async function makeHyperFetch ({
     const { hostname } = new URL(request.url)
     const accept = request.headers.get('Accept') || ''
 
-    const core = await getCore(`hyper://${hostname}/`)
+    const core = await sdk.get(`hyper://${hostname}/`)
 
     if (accept.includes('text/event-stream')) {
       const events = new EventIterator(({ push }) => {
@@ -298,7 +206,7 @@ export default async function makeHyperFetch ({
     const pathname = decodeURI(ensureLeadingSlash(rawPathname))
     const name = pathname.slice(`/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/`.length)
 
-    const core = await getCore(`hyper://${hostname}/`)
+    const core = await sdk.get(`hyper://${hostname}/`)
 
     await getExtension(core, name)
 
@@ -321,7 +229,7 @@ export default async function makeHyperFetch ({
 
     const name = pathname.slice(`/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/`.length)
 
-    const core = await getCore(`hyper://${hostname}/`)
+    const core = await sdk.get(`hyper://${hostname}/`)
 
     const extension = await getExtension(core, name)
     const data = await request.text()
@@ -337,7 +245,7 @@ export default async function makeHyperFetch ({
     const subFolder = pathname.slice(`/${SPECIAL_FOLDER}/${EXTENSIONS_FOLDER_NAME}/`.length)
     const [name, extensionPeer] = subFolder.split('/')
 
-    const core = await getCore(`hyper://${hostname}/`)
+    const core = await sdk.get(`hyper://${hostname}/`)
 
     const extension = await getExtension(core, name)
     const peers = await getExtensionPeers(core, name)
@@ -363,7 +271,7 @@ export default async function makeHyperFetch ({
     }
 
     try {
-      const drive = await getDriveFromKey(key, true)
+      const drive = await sdk.getDrive(key)
 
       return { body: drive.url }
     } catch (e) {
@@ -389,7 +297,7 @@ export default async function makeHyperFetch ({
       return { status: 400, body: 'Must specify key parameter to resolve' }
     }
 
-    const drive = await getDriveFromKey(key, false)
+    const drive = await sdk.getDrive(key)
 
     return { body: drive.url }
   }
@@ -401,7 +309,7 @@ export default async function makeHyperFetch ({
     const mtime = Date.parse(request.headers.get('Last-Modified')) || Date.now()
     const isFormData = contentType.includes('multipart/form-data')
 
-    const drive = await getDrive(`hyper://${hostname}/`, true)
+    const drive = await sdk.getDrive(`hyper://${hostname}/`)
 
     if (!drive.db.feed.writable) {
       return { status: 403, body: `Cannot PUT file to read-only drive: ${drive.url}`, headers: { Location: request.url } }
@@ -459,7 +367,7 @@ export default async function makeHyperFetch ({
 
   async function deleteDrive (request) {
     const { hostname } = new URL(request.url)
-    const drive = await getDrive(`hyper://${hostname}/`, true)
+    const drive = await sdk.getDrive(`hyper://${hostname}/`)
 
     await drive.purge()
 
@@ -470,7 +378,7 @@ export default async function makeHyperFetch ({
     const { hostname, pathname: rawPathname } = new URL(request.url)
     const pathname = decodeURI(ensureLeadingSlash(rawPathname))
 
-    const drive = await getDrive(`hyper://${hostname}/`, true)
+    const drive = await sdk.getDrive(`hyper://${hostname}/`)
 
     if (!drive.db.feed.writable) {
       return { status: 403, body: `Cannot DELETE file in read-only drive: ${drive.url}`, headers: { Location: request.url } }
@@ -522,7 +430,14 @@ export default async function makeHyperFetch ({
     const version = parts[3]
     const realPath = ensureLeadingSlash(parts.slice(4).join('/'))
 
-    const drive = await getDrive(`hyper://${hostname}/`, true)
+    const drive = await sdk.getDrive(`hyper://${hostname}/`)
+
+    if (!drive.writable && !drive.core.length) {
+      return {
+        status: 404,
+        body: 'Peers Not Found'
+      }
+    }
 
     const snapshot = await drive.checkout(version)
 
@@ -538,7 +453,14 @@ export default async function makeHyperFetch ({
     const isRanged = request.headers.get('Range') || ''
     const noResolve = searchParams.has('noResolve')
 
-    const drive = await getDrive(`hyper://${hostname}/`, true)
+    const drive = await sdk.getDrive(`hyper://${hostname}/`)
+
+    if (!drive.writable && !drive.core.length) {
+      return {
+        status: 404,
+        body: 'Peers Not Found'
+      }
+    }
 
     return serveHead(drive, pathname, { accept, isRanged, noResolve })
   }
@@ -662,7 +584,7 @@ export default async function makeHyperFetch ({
     const version = parts[3]
     const realPath = ensureLeadingSlash(parts.slice(4).join('/'))
 
-    const drive = await getDrive(`hyper://${hostname}/`, true)
+    const drive = await sdk.getDrive(`hyper://${hostname}/`)
 
     const snapshot = await drive.checkout(version)
 
@@ -679,7 +601,14 @@ export default async function makeHyperFetch ({
     const isRanged = request.headers.get('Range') || ''
     const noResolve = searchParams.has('noResolve')
 
-    const drive = await getDrive(`hyper://${hostname}/`, true)
+    const drive = await sdk.getDrive(`hyper://${hostname}/`)
+
+    if (!drive.writable && !drive.core.length) {
+      return {
+        status: 404,
+        body: 'Peers Not Found'
+      }
+    }
 
     return serveGet(drive, pathname, { accept, isRanged, noResolve })
   }

@@ -24,7 +24,6 @@
   "homepage": "https://github.com/RangerMauve/hypercore-fetch#readme",
   "dependencies": {
     "event-iterator": "^2.0.0",
-    "hyperdrive": "^11.8.1",
     "make-fetch": "^3.1.1",
     "mime": "^3.0.0",
     "range-parser": "^1.2.1",
@@ -32,7 +31,7 @@
   },
   "devDependencies": {
     "@rangermauve/fetch-event-source": "^1.0.3",
-    "hyper-sdk": "^4.4.0",
+    "hyper-sdk": "^6.0.0",
     "standard": "^17.0.0",
     "tape": "^5.2.2"
   }
