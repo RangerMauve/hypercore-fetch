@@ -652,6 +652,52 @@ test('Check hyperdrive writability', async (t) => {
   t.equal(writableHeadersAllow, 'HEAD,GET,PUT,DELETE', 'Expected writable Allows header')
 })
 
+test('Diff two directories', async (t) => {
+  const created = await nextURL(t)
+
+  const putURL = new URL('/example.txt', created)
+  const uploadedResponse = await fetch(putURL, {
+    method: 'put',
+    body: SAMPLE_CONTENT
+  })
+  await checkResponse(uploadedResponse, t)
+
+  const diffURL = new URL('/$/diff/1..2/', created)
+  const diffResponse = await fetch(diffURL)
+  await checkResponse(diffResponse, t)
+
+  const [{ left, right }] = await diffResponse.json()
+  const { seq, key, value } = left
+
+  t.equal(seq, 1, 'Left half of diff contained correct seq number')
+  t.equal(key, '/example.txt', 'Left half of diff contained correct key')
+  t.equal(value.blob.byteLength, 11, 'Blob for left half of diff contained correct byteLength')
+  t.ok(value.metadata.mtime, 'Left half of diff contained metadata mtime')
+  t.notOk(right, 'Diff contained null "right"')
+
+  // Test diff with only one old version specified
+  const onlyOneVersionDiffURL = new URL('/$/diff/1..2/', created)
+  const onlyOneVersionDiffResponse = await fetch(onlyOneVersionDiffURL)
+  await checkResponse(onlyOneVersionDiffResponse, t)
+
+  // Should be the same as the diff with new version explicitly set to the latest version
+  const [{ left: onlyOneVersionLeft, right: onlyOneVersionRight }] = await onlyOneVersionDiffResponse.json()
+  t.deepEqual([left, right], [onlyOneVersionLeft, onlyOneVersionRight], 'Got expected diff response with only one version')
+
+  // Test out-of-range diff error handling
+  const outOfRangeDiffURL = new URL('/$/diff/1..3/', created)
+  const outOfRangeDiffResponse = await fetch(outOfRangeDiffURL)
+  t.notOk(outOfRangeDiffResponse.ok, 'error response for out-of-range diff')
+
+  const outOfRangeDiffResponseEtagHeader = outOfRangeDiffResponse.headers.get('ETag')
+  t.equal(outOfRangeDiffResponseEtagHeader, '2', 'Headers got ETag for latest version')
+
+  // Test out-of-range diff error handling with only one version
+  const outOfRangeOnlyOneVersionDiffURL = new URL('/$/diff/3/', created)
+  const outOfRangeOnlyOneVersionDiffResponse = await fetch(outOfRangeOnlyOneVersionDiffURL)
+  t.notOk(outOfRangeOnlyOneVersionDiffResponse.ok, 'error response for out-of-range diff with only one version specified')
+})
+
 async function checkResponse (response, t, successMessage = 'Response OK') {
   if (!response.ok) {
     const message = await response.text()

@@ -228,6 +228,15 @@ From there, you can use `GET` and `HEAD` requests with allt he same headers and 
 
 Note that you cannot `PUT` or `DELETE` data in a versioned folder.
 
+### `fetch('hyper://NAME/$/diff/OLD_VERSION..NEW_VERSION/folder/')`
+
+You can get a recursive diff of the changes inside a folder between
+two version of a hyperdrive by sending a `GET` request to paths inside
+the special `/$/diff` folder. `OLD_VERSION` and `NEW_VERSION` should
+be numbers representing the versions to compare.
+
+Response body is the JSON object returned by
+[`drive.diff`](https://docs.holepunch.to/building-blocks/hyperdrive#const-stream-drive.diff-version-folder-options).
 
 ## Limitations:
 
