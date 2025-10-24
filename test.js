@@ -3,9 +3,9 @@ import * as SDK from 'hyper-sdk'
 import test from 'tape'
 import createEventSource from '@rangermauve/fetch-event-source'
 import { once } from 'events'
-import os from 'os'
+import tmp from 'test-tmp'
+
 import { join } from 'path'
-import { rm } from 'fs/promises'
 
 import makeHyperFetch from './index.js'
 
@@ -26,11 +26,10 @@ async function nextURL (t) {
   return created
 }
 
-const tmpSuffix = Math.random().toString().slice(3, 8)
-const tmp = join(os.tmpdir(), `hp-ftch-${tmpSuffix}`)
+const tmpDir = await tmp()
 
-const sdk1 = await SDK.create({ storage: join(tmp, 'sdk1') })
-const sdk2 = await SDK.create({ storage: join(tmp, 'sdk2') })
+const sdk1 = await SDK.create({ storage: join(tmpDir, 'sdk1') })
+const sdk2 = await SDK.create({ storage: join(tmpDir, 'sdk2') })
 
 const fetch = await makeHyperFetch({
   sdk: sdk1,
@@ -47,7 +46,6 @@ test.onFinish(async () => {
     sdk1.close(),
     sdk2.close()
   ])
-  await rm(tmp, { recursive: true })
 })
 
 test('Quick check', async (t) => {
@@ -650,6 +648,48 @@ test('Check hyperdrive writability', async (t) => {
   await checkResponse(writableHeadResponse, t, 'Able to load HEAD')
   const writableHeadersAllow = writableHeadResponse.headers.get('Allow')
   t.equal(writableHeadersAllow, 'HEAD,GET,PUT,DELETE', 'Expected writable Allows header')
+})
+
+test('Able to open drive by URL if previously opened by name', async (t) => {
+  const storage = await tmp()
+  let sdk = await SDK.create({ storage })
+  try {
+    let fetch = await makeHyperFetch({
+      sdk,
+      writable: true
+    })
+
+    const createResponse = await fetch(`hyper://localhost/?key=example${next()}`, {
+      method: 'post'
+    })
+    await checkResponse(createResponse, t, 'Created new drive')
+
+    const created = await createResponse.text()
+
+    const uploadLocation = new URL('./example.txt', created)
+
+    const uploadResponse = await fetch(uploadLocation, {
+      method: 'put',
+      body: SAMPLE_CONTENT
+    })
+
+    await checkResponse(uploadResponse, t)
+
+    await sdk.close()
+
+    sdk = await SDK.create({ storage })
+    fetch = await makeHyperFetch({
+      sdk,
+      writable: true
+    })
+
+    const listDirRequest = await fetch(created)
+    await checkResponse(listDirRequest, t)
+    const entries = await listDirRequest.json()
+    t.deepEqual(entries, ['example.txt'], 'files are listed')
+  } finally {
+    await sdk.close()
+  }
 })
 
 async function checkResponse (response, t, successMessage = 'Response OK') {

@@ -31,8 +31,9 @@
   },
   "devDependencies": {
     "@rangermauve/fetch-event-source": "^1.0.3",
-    "hyper-sdk": "^6.0.0",
+    "hyper-sdk": "^6.1.0",
     "standard": "^17.0.0",
-    "tape": "^5.2.2"
+    "tape": "^5.2.2",
+    "tmp-promise": "^3.0.3"
   }
 }
