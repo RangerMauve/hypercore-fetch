@@ -16,7 +16,7 @@ const fetch = await makeFetch({
   writable: true
 })
 
-const someURL = `hyper://TODO_REAL_URL_HERE_PLEASE`
+const someURL = `hyper://blog.mauve.moe/`
 
 const response = await fetch(someURL)
 
@@ -27,7 +27,7 @@ console.log(data)
 
 ## API
 
-### `makeHyperFetch({sdk, writable=false, extensionMessages = writable, renderIndex}) => fetch()`
+### `makeHyperFetch({sdk, writable=false, extensionMessages = writable, renderIndex, onLoad, onDelete}) => fetch()`
 
 Creates a hypercore-fetch instance.
 
@@ -39,6 +39,10 @@ The `writable` flag toggles whether the `PUT`/`POST`/`DELETE` methods are availa
 
 `renderIndex` is an optional function to override the HTML index rendering functionality. By default it will make a simple page which renders links to files and folders within the directory.
 This function takes the `url`, `files` array and `fetch` instance as arguments.
+
+`onLoad` is an optional function that gets called whenever a site is loaded. It gets these arguments passed in: `(url: URL, writable: boolean, key?: string)`. The `key` gets specified on creation based on the name a user assigned it. Use this to track created drives and last access times (e.g. for clearing out old drives).
+
+`onDelete` is an optional function that gets called whenever a drive is purged from storage. Similar to `onLoad`, it gets called with a `URL` of the deleted site.
 
 After you've created it, `fetch` will behave like it does in [browsers](https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API).
 

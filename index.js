@@ -11,6 +11,8 @@ import { EventIterator } from 'event-iterator'
 /** @import Hyperdrive from 'hyperdrive' */
 
 /** @typedef {(url: URL, files: string[], fetch: typeof globalThis.fetch) => Promise<string>} RenderIndexHandler */
+/** @typedef {(url: URL, writable: boolean, name?: string) => void}  OnLoadHandler */
+/** @typedef {(url: URL) => void} OnDeleteHandler */
 
 const DEFAULT_TIMEOUT = 5000
 
@@ -72,6 +74,8 @@ mime.define({
   'text/gemini': ['gmi', 'gemini']
 }, true)
 
+function noop () {}
+
 /**
  *
  * @param {object} options
@@ -80,14 +84,18 @@ mime.define({
  * @param {boolean} [options.extensionMessages]
  * @param {number} [options.timeout]
  * @param {typeof DEFAULT_RENDER_INDEX} [options.renderIndex]
- * @returns
+ * @param {OnLoadHandler} [options.onLoad]
+ * @param {OnDeleteHandler} [options.onDelete]
+ * @returns {Promise<typeof globalThis.fetch>}
  */
 export default async function makeHyperFetch ({
   sdk,
   writable = false,
   extensionMessages = writable,
   timeout = DEFAULT_TIMEOUT,
-  renderIndex = DEFAULT_RENDER_INDEX
+  renderIndex = DEFAULT_RENDER_INDEX,
+  onLoad = noop,
+  onDelete = noop
 }) {
   const { fetch, router } = makeRoutedFetch({
     onError
@@ -344,6 +352,7 @@ export default async function makeHyperFetch ({
 
     try {
       const drive = await sdk.getDrive(key)
+      onLoad(new URL('/', drive.url), drive.writable, key)
 
       return { body: drive.url }
     } catch (e) {
@@ -375,6 +384,7 @@ export default async function makeHyperFetch ({
     }
 
     const drive = await sdk.getDrive(key)
+    onLoad(new URL('/', drive.url), drive.writable, key)
 
     return { body: drive.url }
   }
@@ -396,6 +406,8 @@ export default async function makeHyperFetch ({
     if (!drive.writable) {
       return { status: 403, body: `Cannot PUT file to read-only drive: ${drive.url}`, headers: { Location: request.url } }
     }
+
+    onLoad(new URL('/', request.url), drive.writable)
 
     if (isFormData) {
       // It's a form! Get the files out and process them
@@ -459,6 +471,7 @@ export default async function makeHyperFetch ({
   async function deleteDrive (request) {
     const { hostname } = new URL(request.url)
     const drive = await sdk.getDrive(`hyper://${hostname}/`)
+    onDelete(new URL('/', request.url))
 
     await drive.purge()
 
@@ -474,10 +487,11 @@ export default async function makeHyperFetch ({
     const pathname = decodeURI(ensureLeadingSlash(rawPathname))
 
     const drive = await sdk.getDrive(`hyper://${hostname}/`)
-
     if (!drive.writable) {
       return { status: 403, body: `Cannot DELETE file in read-only drive: ${drive.url}`, headers: { Location: request.url } }
     }
+
+    onLoad(new URL('/', request.url), drive.writable)
 
     if (pathname.endsWith('/')) {
       let didDelete = false
@@ -709,6 +723,15 @@ export default async function makeHyperFetch ({
 
     const drive = await sdk.getDrive(`hyper://${hostname}/`)
 
+    if (!drive.writable && !drive.core.length) {
+      return {
+        status: 404,
+        body: 'Peers Not Found'
+      }
+    }
+
+    onLoad(new URL('/', request.url), drive.writable)
+
     const snapshot = await drive.checkout(version)
 
     return serveGet(snapshot, realPath, { accept, isRanged, noResolve })
@@ -736,6 +759,8 @@ export default async function makeHyperFetch ({
         body: 'Peers Not Found'
       }
     }
+
+    onLoad(new URL('/', request.url), drive.writable)
 
     return serveGet(drive, pathname, { accept, isRanged, noResolve })
   }

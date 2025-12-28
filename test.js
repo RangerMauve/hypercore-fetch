@@ -9,19 +9,28 @@ import { rm } from 'fs/promises'
 
 import makeHyperFetch from './index.js'
 
+/** @import {OnLoadHandler, OnDeleteHandler} from './index.js' */
+
 const SAMPLE_CONTENT = 'Hello World'
 const DNS_DOMAIN = 'blog.mauve.moe'
 let count = 0
+
+/** @type {OnLoadHandler | null} */
+let onLoad = null
+/** @type {OnDeleteHandler | null} */
+let onDelete = null
+
 function next () {
   return count++
 }
 
 /**
  * @param {import('tape').Test} t
+ * @param {string} [name]
  * @returns {Promise<string>}
  */
-async function nextURL (t) {
-  const createResponse = await fetch(`hyper://localhost/?key=example${next()}`, {
+async function nextURL (t, name = `example${next()}`) {
+  const createResponse = await fetch(`hyper://localhost/?key=${name}`, {
     method: 'post'
   })
   await checkResponse(createResponse, t, 'Created new drive')
@@ -38,7 +47,9 @@ const sdk2 = await SDK.create({ storage: join(tmp, 'sdk2') })
 
 const fetch = await makeHyperFetch({
   sdk: sdk1,
-  writable: true
+  writable: true,
+  onLoad: (...args) => onLoad && onLoad(...args),
+  onDelete: (...args) => onDelete && onDelete(...args)
 })
 
 const fetch2 = await makeHyperFetch({
@@ -656,6 +667,48 @@ test('Check hyperdrive writability', async (t) => {
   await checkResponse(writableHeadResponse, t, 'Able to load HEAD')
   const writableHeadersAllow = writableHeadResponse.headers.get('Allow')
   t.equal(writableHeadersAllow, 'HEAD,GET,PUT,DELETE', 'Expected writable Allows header')
+})
+
+test.only('onLoad and onDelete handlers', async (t) => {
+  /** @type {Parameters<OnLoadHandler> | Parameters<OnDeleteHandler> | null} */
+  let args = null
+
+  onLoad = (..._args) => {
+    args = _args
+  }
+  onDelete = (..._args) => {
+    args = _args
+  }
+
+  const created = await nextURL(t, 'example')
+
+  if (args === null) return t.fail('onLoad did not get called')
+  // @ts-ignore For some reason TS can't tell args gets set
+  t.equal(args[0].toString(), created, 'onLoad got created URL')
+  t.equal(args[1], true, 'onLoad knows created URL is writable')
+  t.equal(args[2], 'example', 'onLoad knows key for created URL')
+
+  args = null
+
+  const toFetch = `hyper://${DNS_DOMAIN}/`
+  const response = await fetch(toFetch + 'index.html')
+  await response.text()
+
+  if (args === null) return t.fail('onLoad did not get called')
+  // @ts-ignore For some reason TS can't tell args gets set
+  t.equal(args[0].toString(), toFetch, 'onLoad got loaded URL')
+  t.equal(args[1], false, 'onLoad knows loaded URL is not writable')
+  t.equal(args[2], undefined, 'onLoad lacks key for loaded domain')
+
+  args = null
+
+  await fetch(toFetch, {
+    method: 'DELETE'
+  })
+
+  if (args === null) return t.fail('onDelete did not get called')
+  // @ts-ignore For some reason TS can't tell args gets set
+  t.equal(args[0].toString(), toFetch, 'onDelete got URL of deleted drive')
 })
 
 /**

@@ -7,7 +7,9 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "test": "node test",
-    "lint": "standard --fix && tsc"
+    "lint": "standard --fix && tsc --noEmit",
+    "build": "tsc",
+    "preversion": "npm run lint && npm run test"
   },
   "repository": {
     "type": "git",
