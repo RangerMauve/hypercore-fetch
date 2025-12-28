@@ -1,10 +1,16 @@
 import { posix } from 'path'
 
+// @ts-ignore
 import { Readable, pipelinePromise } from 'streamx'
 import { makeRoutedFetch } from 'make-fetch'
 import mime from 'mime/index.js'
 import parseRange from 'range-parser'
 import { EventIterator } from 'event-iterator'
+
+/** @import Hypercore from 'hypercore' */
+/** @import Hyperdrive from 'hyperdrive' */
+
+/** @typedef {(url: URL, files: string[], fetch: typeof globalThis.fetch) => Promise<string>} RenderIndexHandler */
 
 const DEFAULT_TIMEOUT = 5000
 
@@ -47,6 +53,7 @@ const INDEX_FILES = [
   'README.org'
 ]
 
+/** @type {RenderIndexHandler} */
 async function DEFAULT_RENDER_INDEX (url, files, fetch) {
   return `
 <!DOCTYPE html>
@@ -65,6 +72,16 @@ mime.define({
   'text/gemini': ['gmi', 'gemini']
 }, true)
 
+/**
+ *
+ * @param {object} options
+ * @param {import('hyper-sdk').SDK} options.sdk
+ * @param {boolean} [options.writable]
+ * @param {boolean} [options.extensionMessages]
+ * @param {number} [options.timeout]
+ * @param {typeof DEFAULT_RENDER_INDEX} [options.renderIndex]
+ * @returns
+ */
 export default async function makeHyperFetch ({
   sdk,
   writable = false,
@@ -103,8 +120,14 @@ export default async function makeHyperFetch ({
   router.get('hyper://*/**', getFiles)
   router.head('hyper://*/**', headFiles)
 
-  async function onError (e, request) {
+  /**
+   *
+   * @param {Error} e
+   * @returns {Promise<import('make-fetch').ResponseLike>}
+   */
+  async function onError (e) {
     return {
+      // @ts-ignore
       status: e.statusCode || 500,
       headers: {
         'Content-Type': 'text/plain; charset=utf-8'
@@ -113,6 +136,12 @@ export default async function makeHyperFetch ({
     }
   }
 
+  /**
+   *
+   * @param {Hypercore} core
+   * @param {string} name
+   * @returns
+   */
   async function getExtension (core, name) {
     const key = core.url + name
     if (extensions.has(key)) {
@@ -125,7 +154,7 @@ export default async function makeHyperFetch ({
     }
 
     const extension = core.registerExtension(name, {
-      encoding: 'utf8',
+      encoding: 'utf-8',
       onmessage: (content, peer) => {
         core.emit(EXTENSION_EVENT, name, content, peer)
       }
@@ -136,6 +165,11 @@ export default async function makeHyperFetch ({
     return extension
   }
 
+  /**
+   * @param {Hypercore} core
+   * @param {string} name
+   * @returns
+   */
   async function getExtensionPeers (core, name) {
     // List peers with this extension
     const allPeers = core.peers
@@ -144,10 +178,18 @@ export default async function makeHyperFetch ({
     })
   }
 
+  /**
+   * @param {Hypercore} core
+   * @returns
+   */
   function listExtensionNames (core) {
     return [...core.extensions.keys()]
   }
 
+  /**
+   * @param {Request} request
+   * @returns
+   */
   async function listExtensions (request) {
     const { hostname } = new URL(request.url)
     const accept = request.headers.get('Accept') || ''
@@ -156,6 +198,12 @@ export default async function makeHyperFetch ({
 
     if (accept.includes('text/event-stream')) {
       const events = new EventIterator(({ push }) => {
+        /**
+         *
+         * @param {string} name
+         * @param {string} content
+         * @param {import('hypercore').Peer} peer
+         */
         function onMessage (name, content, peer) {
           const id = peer.remotePublicKey.toString('hex')
           // TODO: Fancy verification on the `name`?
@@ -164,10 +212,18 @@ export default async function makeHyperFetch ({
 
           push(`id:${id}\nevent:${name}\n${data}\n`)
         }
+
+        /**
+         * @param {import('hypercore').Peer} peer
+         */
         function onPeerOpen (peer) {
           const id = peer.remotePublicKey.toString('hex')
           push(`id:${id}\nevent:${PEER_OPEN}\n\n`)
         }
+
+        /**
+         * @param {import('hypercore').Peer} peer
+         */
         function onPeerRemove (peer) {
           // Whatever, probably an uninitialized peer
           if (!peer.remotePublicKey) return
@@ -201,6 +257,10 @@ export default async function makeHyperFetch ({
     }
   }
 
+  /**
+   * @param {Request} request
+   * @returns
+   */
   async function listenExtension (request) {
     const { hostname, pathname: rawPathname } = new URL(request.url)
     const pathname = decodeURI(ensureLeadingSlash(rawPathname))
@@ -223,6 +283,10 @@ export default async function makeHyperFetch ({
     }
   }
 
+  /**
+   * @param {Request} request
+   * @returns
+   */
   async function broadcastExtension (request) {
     const { hostname, pathname: rawPathname } = new URL(request.url)
     const pathname = decodeURI(ensureLeadingSlash(rawPathname))
@@ -238,6 +302,10 @@ export default async function makeHyperFetch ({
     return { status: 200 }
   }
 
+  /**
+   * @param {Request} request
+   * @returns
+   */
   async function extensionToPeer (request) {
     const { hostname, pathname: rawPathname } = new URL(request.url)
     const pathname = decodeURI(ensureLeadingSlash(rawPathname))
@@ -264,6 +332,10 @@ export default async function makeHyperFetch ({
     return { status: 200 }
   }
 
+  /**
+   * @param {Request} request
+   * @returns
+   */
   async function getKey (request) {
     const key = new URL(request.url).searchParams.get('key')
     if (!key) {
@@ -275,10 +347,11 @@ export default async function makeHyperFetch ({
 
       return { body: drive.url }
     } catch (e) {
-      if (e.message === ERROR_KEY_NOT_CREATED) {
+      const message = /** @type Error */(e).message
+      if (message === ERROR_KEY_NOT_CREATED) {
         return {
           status: 400,
-          body: e.message,
+          body: message,
           headers: {
             [HEADER_CONTENT_TYPE]: MIME_TEXT_PLAIN
           }
@@ -287,6 +360,10 @@ export default async function makeHyperFetch ({
     }
   }
 
+  /**
+   * @param {Request} request
+   * @returns
+   */
   async function createKey (request) {
     // TODO: Allow importing secret keys here
     // Maybe specify a seed to use for generating the blobs?
@@ -302,16 +379,21 @@ export default async function makeHyperFetch ({
     return { body: drive.url }
   }
 
+  /**
+   * @param {Request} request
+   * @returns
+   */
   async function putFiles (request) {
     const { hostname, pathname: rawPathname } = new URL(request.url)
     const pathname = decodeURI(ensureLeadingSlash(rawPathname))
     const contentType = request.headers.get('Content-Type') || ''
-    const mtime = Date.parse(request.headers.get('Last-Modified')) || Date.now()
+    const lastModified = request.headers.get('Last-Modified')
+    const mtime = lastModified ? Date.parse(lastModified) : Date.now()
     const isFormData = contentType.includes('multipart/form-data')
 
     const drive = await sdk.getDrive(`hyper://${hostname}/`)
 
-    if (!drive.db.feed.writable) {
+    if (!drive.writable) {
       return { status: 403, body: `Cannot PUT file to read-only drive: ${drive.url}`, headers: { Location: request.url } }
     }
 
@@ -320,6 +402,7 @@ export default async function makeHyperFetch ({
       const formData = await request.formData()
       for (const [name, data] of formData) {
         if (name !== 'file') continue
+        if (typeof data === 'string') continue
         const filePath = posix.join(pathname, data.name)
         await pipelinePromise(
           Readable.from(data.stream()),
@@ -357,6 +440,10 @@ export default async function makeHyperFetch ({
     return { status: 201, headers }
   }
 
+  /**
+   * @param {Request} request
+   * @returns
+   */
   function putFilesVersioned (request) {
     return {
       status: 405,
@@ -365,6 +452,10 @@ export default async function makeHyperFetch ({
     }
   }
 
+  /**
+   * @param {Request} request
+   * @returns
+   */
   async function deleteDrive (request) {
     const { hostname } = new URL(request.url)
     const drive = await sdk.getDrive(`hyper://${hostname}/`)
@@ -374,13 +465,17 @@ export default async function makeHyperFetch ({
     return { status: 200 }
   }
 
+  /**
+   * @param {Request} request
+   * @returns
+   */
   async function deleteFiles (request) {
     const { hostname, pathname: rawPathname } = new URL(request.url)
     const pathname = decodeURI(ensureLeadingSlash(rawPathname))
 
     const drive = await sdk.getDrive(`hyper://${hostname}/`)
 
-    if (!drive.db.feed.writable) {
+    if (!drive.writable) {
       return { status: 403, body: `Cannot DELETE file in read-only drive: ${drive.url}`, headers: { Location: request.url } }
     }
 
@@ -413,10 +508,18 @@ export default async function makeHyperFetch ({
     return { status: 200, headers }
   }
 
+  /**
+   * @param {Request} request
+   * @returns
+   */
   function deleteFilesVersioned (request) {
     return { status: 405, body: 'Cannot DELETE old version', headers: { Location: request.url } }
   }
 
+  /**
+   * @param {Request} request
+   * @returns
+   */
   async function headFilesVersioned (request) {
     const url = new URL(request.url)
     const { hostname, pathname: rawPathname, searchParams } = url
@@ -427,7 +530,7 @@ export default async function makeHyperFetch ({
     const noResolve = searchParams.has('noResolve')
 
     const parts = pathname.split('/')
-    const version = parts[3]
+    const version = parseInt(parts[3], 10)
     const realPath = ensureLeadingSlash(parts.slice(4).join('/'))
 
     const drive = await sdk.getDrive(`hyper://${hostname}/`)
@@ -444,6 +547,10 @@ export default async function makeHyperFetch ({
     return serveHead(snapshot, realPath, { accept, isRanged, noResolve })
   }
 
+  /**
+   * @param {Request} request
+   * @returns
+   */
   async function headFiles (request) {
     const url = new URL(request.url)
     const { hostname, pathname: rawPathname, searchParams } = url
@@ -465,19 +572,30 @@ export default async function makeHyperFetch ({
     return serveHead(drive, pathname, { accept, isRanged, noResolve })
   }
 
+  /**
+   *
+   * @param {Hyperdrive} drive
+   * @param {*} pathname
+   * @param {object} options
+   * @param {string} options.accept
+   * @param {string} options.isRanged
+   * @param {boolean} options.noResolve
+   * @returns
+   */
   async function serveHead (drive, pathname, { accept, isRanged, noResolve }) {
     const isDirectory = pathname.endsWith('/')
     const fullURL = new URL(pathname, drive.url).href
 
-    const isWritable = writable && drive.db.feed.writable
+    const isWritable = writable && drive.writable
 
     const Allow = isWritable ? BASIC_METHODS.concat(WRITABLE_METHODS) : BASIC_METHODS
 
+    /** @type {{[key: string]: string}} */
     const resHeaders = {
       ETag: `${drive.version}`,
       'Accept-Ranges': 'bytes',
       Link: `<${fullURL}>; rel="canonical"`,
-      Allow
+      Allow: Allow.toString()
     }
 
     if (isDirectory) {
@@ -549,8 +667,9 @@ export default async function makeHyperFetch ({
     const size = entry.value.blob.byteLength
     if (isRanged) {
       const ranges = parseRange(size, isRanged)
+      const isRangeValid = ranges !== -1 && ranges !== -2 && ranges
 
-      if (ranges && ranges.length && ranges.type === 'bytes') {
+      if (isRangeValid && ranges.length && ranges.type === 'bytes') {
         const [{ start, end }] = ranges
         const length = (end - start + 1)
 
@@ -571,6 +690,10 @@ export default async function makeHyperFetch ({
     }
   }
 
+  /**
+   * @param {Request} request
+   * @returns
+   */
   async function getFilesVersioned (request) {
     const url = new URL(request.url)
     const { hostname, pathname: rawPathname, searchParams } = url
@@ -581,7 +704,7 @@ export default async function makeHyperFetch ({
     const noResolve = searchParams.has('noResolve')
 
     const parts = pathname.split('/')
-    const version = parts[3]
+    const version = parseInt(parts[3], 10)
     const realPath = ensureLeadingSlash(parts.slice(4).join('/'))
 
     const drive = await sdk.getDrive(`hyper://${hostname}/`)
@@ -591,8 +714,12 @@ export default async function makeHyperFetch ({
     return serveGet(snapshot, realPath, { accept, isRanged, noResolve })
   }
 
-  // TODO: Redirect on directories without trailing slash
+  /**
+ * @param {Request} request
+ * @returns
+ */
   async function getFiles (request) {
+    // TODO: Redirect on directories without trailing slash
     const url = new URL(request.url)
     const { hostname, pathname: rawPathname, searchParams } = url
     const pathname = decodeURI(ensureLeadingSlash(rawPathname))
@@ -613,6 +740,15 @@ export default async function makeHyperFetch ({
     return serveGet(drive, pathname, { accept, isRanged, noResolve })
   }
 
+  /**
+   * @param {Hyperdrive} drive
+   * @param {string} pathname
+   * @param {object} options
+   * @param {string} options.accept
+   * @param {string} options.isRanged
+   * @param {boolean} options.noResolve
+   * @returns
+   */
   async function serveGet (drive, pathname, { accept, isRanged, noResolve }) {
     const isDirectory = pathname.endsWith('/')
     const fullURL = new URL(pathname, drive.url).href
@@ -678,6 +814,13 @@ export default async function makeHyperFetch ({
   return fetch
 }
 
+/**
+ *
+ * @param {Hyperdrive} drive
+ * @param {string} pathname
+ * @param {string} [isRanged]
+ * @returns
+ */
 async function serveFile (drive, pathname, isRanged) {
   const contentType = getMimeType(pathname)
 
@@ -685,6 +828,7 @@ async function serveFile (drive, pathname, isRanged) {
 
   const entry = await drive.entry(pathname)
 
+  /** @type {{[key: string]: string}} */
   const resHeaders = {
     ETag: `${entry.seq + 1}`,
     [HEADER_CONTENT_TYPE]: contentType,
@@ -700,8 +844,9 @@ async function serveFile (drive, pathname, isRanged) {
   const size = entry.value.blob.byteLength
   if (isRanged) {
     const ranges = parseRange(size, isRanged)
+    const isRangeValid = ranges !== -1 && ranges !== -2 && ranges
 
-    if (ranges && ranges.length && ranges.type === 'bytes') {
+    if (isRangeValid && ranges.length && ranges.type === 'bytes') {
       const [{ start, end }] = ranges
       const length = (end - start + 1)
 
@@ -729,6 +874,10 @@ async function serveFile (drive, pathname, isRanged) {
   }
 }
 
+/**
+ * @param {string} pathname
+ * @returns {string[]}
+ */
 function makeToTry (pathname) {
   return [
     pathname,
@@ -737,6 +886,12 @@ function makeToTry (pathname) {
   ]
 }
 
+/**
+ * @param {Hyperdrive} drive
+ * @param {string} pathname
+ * @param {boolean} noResolve
+ * @returns
+ */
 async function resolvePath (drive, pathname, noResolve) {
   if (noResolve) {
     const entry = await drive.entry(pathname)
@@ -754,6 +909,12 @@ async function resolvePath (drive, pathname, noResolve) {
   return { entry: null, path: null }
 }
 
+/**
+ *
+ * @param {Hyperdrive} drive
+ * @param {string} [pathname]
+ * @returns
+ */
 async function listEntries (drive, pathname = '/') {
   const entries = []
   for await (const path of drive.readdir(pathname)) {
@@ -768,9 +929,15 @@ async function listEntries (drive, pathname = '/') {
   return entries
 }
 
+/**
+ *
+ * @param {import('hypercore').Peer[]} peers
+ * @returns
+ */
 function formatPeers (peers) {
   return peers.map((peer) => {
     const remotePublicKey = peer.remotePublicKey.toString('hex')
+    // @ts-ignore
     const remoteHost = peer.stream?.rawStream?.remoteHost
     return {
       remotePublicKey,
@@ -779,12 +946,22 @@ function formatPeers (peers) {
   })
 }
 
+/**
+ *
+ * @param {string} path
+ * @returns {string}
+ */
 function getMimeType (path) {
   let mimeType = mime.getType(path) || 'text/plain; charset=utf-8'
   if (mimeType.startsWith('text/')) mimeType = `${mimeType}; charset=utf-8`
   return mimeType
 }
 
+/**
+ *
+ * @param {string} path
+ * @returns {string}
+ */
 function ensureLeadingSlash (path) {
   return path.startsWith('/') ? path : '/' + path
 }

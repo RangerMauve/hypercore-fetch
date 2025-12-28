@@ -16,6 +16,10 @@ function next () {
   return count++
 }
 
+/**
+ * @param {import('tape').Test} t
+ * @returns {Promise<string>}
+ */
 async function nextURL (t) {
   const createResponse = await fetch(`hyper://localhost/?key=example${next()}`, {
     method: 'post'
@@ -82,7 +86,7 @@ test('Quick check', async (t) => {
 
   const content = await uploadedContentResponse.text()
   const contentType = uploadedContentResponse.headers.get('Content-Type')
-  const contentLink = uploadedContentResponse.headers.get('Link')
+  const contentLink = uploadedContentResponse.headers.get('Link') ?? ''
 
   t.match(contentLink, /^<hyper:\/\/[0-9a-z]{52}\/example%20.txt>; rel="canonical"$/, 'Link header includes both public key and path.')
   t.equal(contentType, 'text/plain; charset=utf-8', 'Content got expected mime type')
@@ -127,7 +131,7 @@ test('HEAD request', async (t) => {
   const headersContentLength = headResponse.headers.get('Content-Length')
   const headersAcceptRanges = headResponse.headers.get('Accept-Ranges')
   const headersLastModified = headResponse.headers.get('Last-Modified')
-  const headersLink = headResponse.headers.get('Link')
+  const headersLink = headResponse.headers.get('Link') ?? ''
 
   t.equal(headResponse.status, 204, 'Response had expected status')
   // Version at which the file was added
@@ -144,7 +148,7 @@ test('PUT file', async (t) => {
 
   const uploadLocation = new URL('./example.txt', created)
 
-  const fakeDate = new Date(Date.parse(0)).toUTCString()
+  const fakeDate = new Date().toUTCString()
   const uploadResponse = await fetch(uploadLocation, {
     method: 'put',
     body: SAMPLE_CONTENT,
@@ -464,12 +468,12 @@ test('EventSource extension messages', async (t) => {
   t.deepEqual(extensionList, ['example'], 'Got expected list of extensions')
 
   const peerResponse1 = await fetch(extensionURL)
-  const peerList1 = await peerResponse1.json()
+  const peerList1 = /** @type {object[]} */ (await peerResponse1.json())
 
   t.equal(peerList1.length, 1, 'Got one peer for extension message on peer1')
 
   const peerResponse2 = await fetch2(extensionURL)
-  const peerList2 = await peerResponse2.json()
+  const peerList2 = /** @type {object[]} */ (await peerResponse2.json())
 
   t.equal(peerList2.length, 1, 'Got one peer for extension message on peer2')
 
@@ -502,11 +506,13 @@ test('EventSource extension messages', async (t) => {
 test('Resolve DNS', async (t) => {
   const loadResponse = await fetch(`hyper://${DNS_DOMAIN}/?noResolve`)
 
-  const entries = await loadResponse.json()
+  const entries = /** @type {object[]} */ (await loadResponse.json())
 
   t.ok(entries.length, 'Loaded contents with some files present')
 
-  const rawLink = loadResponse.headers.get('Link').match(/<(.+)>/)[1]
+  const linkHeader = loadResponse.headers.get('Link') || ''
+  // @ts-ignore
+  const rawLink = linkHeader.match(/<(.+)>/)[1]
   const loadRawURLResponse = await fetch(rawLink + '?noResolve')
 
   const rawLinkEntries = await loadRawURLResponse.json()
@@ -652,10 +658,17 @@ test('Check hyperdrive writability', async (t) => {
   t.equal(writableHeadersAllow, 'HEAD,GET,PUT,DELETE', 'Expected writable Allows header')
 })
 
+/**
+ *
+ * @param {Response} response
+ * @param {import('tape').Test} t
+ * @param {string} [successMessage]
+ * @returns
+ */
 async function checkResponse (response, t, successMessage = 'Response OK') {
   if (!response.ok) {
     const message = await response.text()
-    t.fail(new Error(`HTTP Error ${response.status}:\n${message}`))
+    t.fail(`HTTP Error ${response.status}:\n${message}`)
     return false
   } else {
     t.pass(successMessage)

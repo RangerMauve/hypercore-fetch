@@ -1,0 +1,19 @@
+{
+    "compilerOptions": {
+        "target": "es2022",
+        "module": "nodenext",
+        "moduleResolution": "nodenext",
+        "checkJs": true,
+        "allowJs": true,
+        "declaration": true,
+        "emitDeclarationOnly": true,
+        "outDir": "dist",
+    },
+    "extends": "@tsconfig/node20/tsconfig.json",
+    "files": ["./index.js","./test.js"],
+    "include": [
+        "./index.js",
+        "./test.js",
+        "./node_modules/hyper-sdk/types/*.d.ts"
+    ]
+}

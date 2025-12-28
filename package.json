@@ -4,9 +4,10 @@
   "description": "Implementation of Fetch that uses the Dat SDK for loading p2p content",
   "type": "module",
   "main": "index.js",
+  "types": "./dist/index.d.ts",
   "scripts": {
     "test": "node test",
-    "lint": "standard --fix"
+    "lint": "standard --fix && tsc"
   },
   "repository": {
     "type": "git",
@@ -14,6 +15,7 @@
   },
   "keywords": [
     "dat",
+    "hypercore",
     "fetch"
   ],
   "author": "RangerMauve",
@@ -24,15 +26,21 @@
   "homepage": "https://github.com/RangerMauve/hypercore-fetch#readme",
   "dependencies": {
     "event-iterator": "^2.0.0",
-    "make-fetch": "^3.1.1",
+    "make-fetch": "^3.2.3",
     "mime": "^3.0.0",
     "range-parser": "^1.2.1",
     "streamx": "^2.13.0"
   },
   "devDependencies": {
-    "@rangermauve/fetch-event-source": "^1.0.3",
-    "hyper-sdk": "^6.0.0",
+    "@rangermauve/fetch-event-source": "^2.0.1",
+    "@tsconfig/node20": "^20.1.8",
+    "@types/mime": "^3.0.4",
+    "@types/range-parser": "^1.2.7",
+    "@types/streamx": "^2.9.5",
+    "@types/tape": "^5.8.1",
+    "hyper-sdk": "^6.2.1",
     "standard": "^17.0.0",
-    "tape": "^5.2.2"
+    "tape": "^5.2.2",
+    "typescript": "^5.9.3"
   }
 }
