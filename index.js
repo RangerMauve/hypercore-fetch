@@ -15,6 +15,7 @@ import { EventIterator } from 'event-iterator'
 /** @typedef {(url: URL) => void} OnDeleteHandler */
 
 const DEFAULT_TIMEOUT = 5000
+const DEFAULT_DRIVE = 'default'
 
 const SPECIAL_DOMAIN = 'localhost'
 const SPECIAL_FOLDER = '$'
@@ -83,6 +84,7 @@ function noop () {}
  * @param {boolean} [options.writable]
  * @param {boolean} [options.extensionMessages]
  * @param {number} [options.timeout]
+ * @param {string} [options.defaultDrive]
  * @param {typeof DEFAULT_RENDER_INDEX} [options.renderIndex]
  * @param {OnLoadHandler} [options.onLoad]
  * @param {OnDeleteHandler} [options.onDelete]
@@ -93,6 +95,7 @@ export default async function makeHyperFetch ({
   writable = false,
   extensionMessages = writable,
   timeout = DEFAULT_TIMEOUT,
+  defaultDrive = DEFAULT_DRIVE,
   renderIndex = DEFAULT_RENDER_INDEX,
   onLoad = noop,
   onDelete = noop
@@ -115,6 +118,10 @@ export default async function makeHyperFetch ({
   if (writable) {
     router.get(`hyper://${SPECIAL_DOMAIN}/`, getKey)
     router.post(`hyper://${SPECIAL_DOMAIN}/`, createKey)
+    router.put(`hyper://${SPECIAL_DOMAIN}/`, putFilesDefault)
+    router.delete('hyper://SPECIAL_DOMAIN/**', deleteFilesDefault)
+    router.get(`hyper://${SPECIAL_DOMAIN}/**`, getFilesDefault)
+    router.head(`hyper://${SPECIAL_DOMAIN}/**`, headFilesDefault)
 
     router.put(`hyper://*/${SPECIAL_FOLDER}/${VERSION_FOLDER_NAME}/**`, putFilesVersioned)
     router.put('hyper://*/**', putFiles)
@@ -345,10 +352,7 @@ export default async function makeHyperFetch ({
    * @returns
    */
   async function getKey (request) {
-    const key = new URL(request.url).searchParams.get('key')
-    if (!key) {
-      return { status: 400, body: 'Must specify key parameter to resolve' }
-    }
+    const key = new URL(request.url).searchParams.get('key') || defaultDrive
 
     try {
       const drive = await sdk.getDrive(key)
@@ -378,15 +382,20 @@ export default async function makeHyperFetch ({
     // Maybe specify a seed to use for generating the blobs?
     // Else we'd need to specify the blobs keys and metadata keys
 
-    const key = new URL(request.url).searchParams.get('key')
-    if (!key) {
-      return { status: 400, body: 'Must specify key parameter to resolve' }
-    }
+    const key = new URL(request.url).searchParams.get('key') || defaultDrive
 
     const drive = await sdk.getDrive(key)
-    onLoad(new URL('/', drive.url), drive.writable, key)
 
     return { body: drive.url }
+  }
+
+  /**
+   * @param {Request} request
+   */
+  async function putFilesDefault (request) {
+    const finalURL = await resolveInDefault(request.url)
+
+    return putTo(finalURL, request)
   }
 
   /**
@@ -394,7 +403,16 @@ export default async function makeHyperFetch ({
    * @returns
    */
   async function putFiles (request) {
-    const { hostname, pathname: rawPathname } = new URL(request.url)
+    return putTo(request.url, request)
+  }
+
+  /**
+   * @param {string} url
+   * @param {Request} request
+   * @returns
+   */
+  async function putTo (url, request) {
+    const { hostname, pathname: rawPathname } = new URL(url)
     const pathname = decodeURI(ensureLeadingSlash(rawPathname))
     const contentType = request.headers.get('Content-Type') || ''
     const lastModified = request.headers.get('Last-Modified')
@@ -407,7 +425,7 @@ export default async function makeHyperFetch ({
       return { status: 403, body: `Cannot PUT file to read-only drive: ${drive.url}`, headers: { Location: request.url } }
     }
 
-    onLoad(new URL('/', request.url), drive.writable)
+    onLoad(new URL('/', url), drive.writable)
 
     if (isFormData) {
       // It's a form! Get the files out and process them
@@ -427,7 +445,7 @@ export default async function makeHyperFetch ({
       }
     } else {
       if (pathname.endsWith('/')) {
-        return { status: 405, body: 'Cannot PUT file with trailing slash', headers: { Location: request.url } }
+        return { status: 405, body: 'Cannot PUT file with trailing slash', headers: { Location: url } }
       } else {
         await pipelinePromise(
           Readable.from(request.body),
@@ -482,16 +500,35 @@ export default async function makeHyperFetch ({
    * @param {Request} request
    * @returns
    */
+  async function deleteFilesDefault (request) {
+    const finalURL = await resolveInDefault(request.url)
+
+    return deleteFilesTo(finalURL, request)
+  }
+
+  /**
+   * @param {Request} request
+   * @returns
+   */
   async function deleteFiles (request) {
-    const { hostname, pathname: rawPathname } = new URL(request.url)
+    return deleteFilesTo(request.url, request)
+  }
+
+  /**
+   * @param {string} url
+   * @param {Request} request
+   * @returns
+   */
+  async function deleteFilesTo (url, request) {
+    const { hostname, pathname: rawPathname } = new URL(url)
     const pathname = decodeURI(ensureLeadingSlash(rawPathname))
 
     const drive = await sdk.getDrive(`hyper://${hostname}/`)
     if (!drive.writable) {
-      return { status: 403, body: `Cannot DELETE file in read-only drive: ${drive.url}`, headers: { Location: request.url } }
+      return { status: 403, body: `Cannot DELETE file in read-only drive: ${drive.url}`, headers: { Location: url } }
     }
 
-    onLoad(new URL('/', request.url), drive.writable)
+    onLoad(new URL('/', url), drive.writable)
 
     if (pathname.endsWith('/')) {
       let didDelete = false
@@ -565,8 +602,27 @@ export default async function makeHyperFetch ({
    * @param {Request} request
    * @returns
    */
+  async function headFilesDefault (request) {
+    const finalURL = await resolveInDefault(request.url)
+
+    return headFilesFrom(finalURL, request)
+  }
+
+  /**
+   * @param {Request} request
+   * @returns
+   */
   async function headFiles (request) {
-    const url = new URL(request.url)
+    return headFilesFrom(request.url, request)
+  }
+
+  /**
+   * @param {string} _url
+   * @param {Request} request
+   * @returns
+   */
+  async function headFilesFrom (_url, request) {
+    const url = new URL(_url)
     const { hostname, pathname: rawPathname, searchParams } = url
     const pathname = decodeURI(ensureLeadingSlash(rawPathname))
 
@@ -738,12 +794,31 @@ export default async function makeHyperFetch ({
   }
 
   /**
- * @param {Request} request
- * @returns
- */
+  * @param {Request} request
+  * @returns
+  */
+  async function getFilesDefault (request) {
+    const finalURL = await resolveInDefault(request.url)
+
+    return getFilesFrom(finalURL, request)
+  }
+
+  /**
+   * @param {Request} request
+   * @returns
+   */
   async function getFiles (request) {
+    return getFilesFrom(request.url, request)
+  }
+
+  /**
+   * @param {string} _url
+   * @param {Request} request
+   * @returns
+   */
+  async function getFilesFrom (_url, request) {
     // TODO: Redirect on directories without trailing slash
-    const url = new URL(request.url)
+    const url = new URL(_url)
     const { hostname, pathname: rawPathname, searchParams } = url
     const pathname = decodeURI(ensureLeadingSlash(rawPathname))
 
@@ -760,7 +835,7 @@ export default async function makeHyperFetch ({
       }
     }
 
-    onLoad(new URL('/', request.url), drive.writable)
+    onLoad(new URL('/', url), drive.writable)
 
     return serveGet(drive, pathname, { accept, isRanged, noResolve })
   }
@@ -834,6 +909,20 @@ export default async function makeHyperFetch ({
     }
 
     return serveFile(drive, path, isRanged)
+  }
+
+  /**
+   * Resolve a URL with a pathname to be within the default drive
+   * @param {string} url
+   * @returns {Promise<string>}
+   */
+  async function resolveInDefault (url) {
+    const { pathname } = new URL(url)
+
+    const drive = await sdk.getDrive(defaultDrive)
+    const finalURL = new URL(pathname, drive.url).href
+
+    return finalURL
   }
 
   return fetch

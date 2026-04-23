@@ -11,11 +11,13 @@ import * as SDK from 'hyper-sdk'
 // Create in-memory hyper-sdk instance
 const sdk = await SDK.create({storage: false})
 
+// Init
 const fetch = await makeFetch({
   sdk: true,
   writable: true
 })
 
+// Download
 const someURL = `hyper://blog.mauve.moe/`
 
 const response = await fetch(someURL)
@@ -23,6 +25,16 @@ const response = await fetch(someURL)
 const data = await response.text()
 
 console.log(data)
+
+const response = await fetch('hyper://localhost/example.txt', {
+  method: 'PUT',
+  body: 'Hello World'
+})
+
+// This is where the data got uploaded
+const location = response.headers.get('Location')
+// Clear the response body or else electron will flip out
+await response.text()
 ```
 
 ## API
@@ -104,6 +116,8 @@ In order to create a writable Hyperdrive with its own URL, you must first genera
 
 `NAME` can be any alphanumeric string which can be used for key generation in [Corestore](https://github.com/holepunchto/corestore).
 
+If you omit the `NAME`, it will use the name `default`.
+
 The response body will contain a `hyper://` URL with the new Hyperdrive.
 
 You can then use this with `PUT`/`DELETE` requests.
@@ -115,6 +129,8 @@ Note that this is only available with the `writable: true` flag.
 If you want to resolve the public key URL of a previously created Hyperdrive, you can do this with the `GET` method on the key creation URL.
 
 `NAME` can be any alphanumeric string which can be used for key generation in [Corestore](https://github.com/holepunchto/corestore).
+
+If you omit the `NAME`, it will use the name `default`.
 
 The response body will contain a `hyper://` URL with the new Hyperdrive.
 
@@ -130,7 +146,7 @@ flag.
 
 The `body` can be any of the options supported by the Fetch API such as a `String`, `Blob`, `FormData`, or `ReadableStream`.
 
-`NAME` can either be the 52 character [z32 encoded](https://github.com/mafintosh/z32) key for a Hyperdrive or Hypercore , or a domain to parse with the [DNSLink](https://www.dnslink.io/) standard.
+`NAME` can either be the 52 character [z32 encoded](https://github.com/mafintosh/z32) key for a Hyperdrive, `localhost` for the `default` drive, or a domain to parse with the [DNSLink](https://www.dnslink.io/) standard.
 
 The mtime metadata is automatically set to the current time when
 uploading. To override this value, pass a `Last-Modified` header with a value
@@ -149,7 +165,7 @@ The `filename` will be the filename within the directory that gets created.
 
 Note that you must use the name `file` for uploaded files.
 
-`NAME` can either be the 52 character [z32 encoded](https://github.com/mafintosh/z32) key for a Hyperdrive or Hypercore , or a domain to parse with the [DNSLink](https://www.dnslink.io/) standard.
+`NAME` can either be the 52 character [z32 encoded](https://github.com/mafintosh/z32) key for a Hyperdrive, `localhost` for the `default` drive, or a domain to parse with the [DNSLink](https://www.dnslink.io/) standard.
 
 ### `fetch('hyper://NAME/', {method: 'DELETE'})`
 
@@ -159,13 +175,13 @@ If this is a writable drive, your data will get fully clearned and trying to wri
 
 If you try to load this drive again data will be loaded from scratch.
 
-`NAME` can either be the 52 character [z32 encoded](https://github.com/mafintosh/z32) key for a Hyperdrive or Hypercore , or a domain to parse with the [DNSLink](https://www.dnslink.io/) standard.
+`NAME` can either be the 52 character [z32 encoded](https://github.com/mafintosh/z32) key for a Hyperdrive, `localhost` for the `default` drive, or a domain to parse with the [DNSLink](https://www.dnslink.io/) standard.
 
 ### `fetch('hyper://NAME/example.txt', {method: 'DELETE'})`
 
 You can delete a file or directory tree in a Hyperdrive by using the `DELETE` method.
 
-`NAME` can either be the 52 character [z32 encoded](https://github.com/mafintosh/z32) key for a Hyperdrive or Hypercore , or a domain to parse with the [DNSLink](https://www.dnslink.io/) standard.
+`NAME` can either be the 52 character [z32 encoded](https://github.com/mafintosh/z32) key for a Hyperdrive, `localhost` for the `default` drive, or a domain to parse with the [DNSLink](https://www.dnslink.io/) standard.
 
 Note that this is only available with the `writable: true` flag.
 
