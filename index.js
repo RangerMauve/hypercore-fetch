@@ -385,6 +385,7 @@ export default async function makeHyperFetch ({
     const key = new URL(request.url).searchParams.get('key') || defaultDrive
 
     const drive = await sdk.getDrive(key)
+    onLoad(new URL('/', drive.url), drive.writable, key)
 
     return { body: drive.url }
   }
