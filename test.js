@@ -669,7 +669,7 @@ test('Check hyperdrive writability', async (t) => {
   t.equal(writableHeadersAllow, 'HEAD,GET,PUT,DELETE', 'Expected writable Allows header')
 })
 
-test.only('onLoad and onDelete handlers', async (t) => {
+test('onLoad and onDelete handlers', async (t) => {
   /** @type {Parameters<OnLoadHandler> | Parameters<OnDeleteHandler> | null} */
   let args = null
 
